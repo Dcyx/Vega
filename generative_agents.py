@@ -1,7 +1,7 @@
 import os
 import configparser
-import faiss
 import math
+import faiss
 from datetime import datetime
 from langchain.chat_models import ChatOpenAI
 from langchain.docstore import InMemoryDocstore

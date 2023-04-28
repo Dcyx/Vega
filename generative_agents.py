@@ -1,9 +1,7 @@
 import os
-import codecs
 import configparser
 import faiss
 import math
-import openai
 from datetime import datetime
 from langchain.chat_models import ChatOpenAI
 from langchain.docstore import InMemoryDocstore
@@ -22,13 +20,12 @@ shoot for moon
 """
 
 config_private = 'config_private.ini'
-with codecs.open(config_private, 'r', 'utf-8') as f:
+with open(config_private, mode='r', encoding='utf-8') as f:
     # 读取配置文件内容
     config = configparser.ConfigParser()
     config.read_file(f)
 os.environ["OPENAI_API_KEY"] = config.get("OpenAI", "api_key")
 os.environ["OPENAI_API_BASE"] = config.get("OpenAI", "api_base")
-
 
 
 def relevance_score_fn(score: float) -> float:

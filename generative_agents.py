@@ -63,14 +63,15 @@ LLM = ChatOpenAI(max_tokens=1500, model_name="gpt-3.5-turbo")  # Can be any LLM 
 
 print(f"LLM = {LLM}")
 
-tommies_memory = GenerativeAgentMemory(
+vega_memory = GenerativeAgentMemory(
     llm=LLM,
     memory_retriever=create_new_memory_retriever(),
     verbose=False,
     reflection_threshold=8  # we will give this a relatively low number to show how reflection works
 )
+vega_memory.pause_to_reflect()
 
-print(f"tommies_memory = {tommies_memory}")
+print(f"vega_memory = {vega_memory}")
 
 vega = GenerativeAgent(
     name="Vega",
@@ -82,16 +83,17 @@ vega = GenerativeAgent(
     status="活泼, 幽默, 是 Yancy 的朋友",
     memory_retriever=create_new_memory_retriever(),
     llm=LLM,
-    memory=tommies_memory
+    memory=vega_memory
 )
 print(f"Vega = {vega}")
 print(vega.get_summary())
 
-# We can add memories directly to the memory object
-vega_observations = [
-]
-for observation in vega_observations:
-    vega.memory.add_memory(observation)
+# YANCY: 后续可用于启动时加载记忆?
+# # We can add memories directly to the memory object
+# vega_observations = [
+# ]
+# for observation in vega_observations:
+#     vega.memory.add_memory(observation)
 
 print("-------------")
 print(vega.get_summary(force_refresh=True))

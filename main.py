@@ -1,5 +1,8 @@
 import os
 import sys
+import codecs
+import configparser
+import openai
 import random
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
@@ -37,28 +40,26 @@ class Vega(QWidget):
         self.left_click = False
         self.mouse_drag_pos = None
 
-        # 托盘
+        # Tray Config
         showing = QAction("现身~", self, triggered=self.showing)
         showing.setIcon(QIcon(icon))
         quit = QAction("退出", self, triggered=self.quit)
         quit.setIcon(QIcon(icon))
-
         self.tray_icon_menu = QMenu(self)
         self.tray_icon_menu.addAction(showing)
         self.tray_icon_menu.addAction(quit)
-
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setIcon(QIcon(icon))
         self.tray_icon.setContextMenu(self.tray_icon_menu)
         self.tray_icon.show()
 
-        # 配置 Vega
-        # 活动窗口: 无边框 + 置顶 + 透明背景
+        # Vega Action Window Config
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶
         self.setAttribute(Qt.WA_TranslucentBackground)  # 半透明背景
         self.setAutoFillBackground(True)  # 非自动填充
         self.repaint()
-        #
+
+        # Load actions & resize & init position
         self.img = QLabel(self)
         self.action_dataset = []
         self.init_data()
@@ -70,6 +71,16 @@ class Vega(QWidget):
         self.timer.timeout.connect(self.run_random_actions)
         self.timer.start(500)
         self.init_position(random_pos=False)
+
+        # Load openai config
+        config_private = 'config_private.ini'
+        self.config = configparser.ConfigParser()
+        with codecs.open(config_private, 'r', 'utf-8') as f:
+            # 读取配置文件内容
+            self.config = configparser.ConfigParser()
+            self.config.read_file(f)
+        openai.api_key = self.config.get("OpenAI", "api_key")
+        openai.api_base = self.config.get("OpenAI", "api_base")
 
     def init_data(self):
         # singing

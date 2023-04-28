@@ -1,7 +1,5 @@
 import sys
 import time
-import codecs
-import configparser
 import openai
 from PyQt5 import QtGui
 from PyQt5 import QtWidgets
@@ -23,15 +21,6 @@ class ChatClient(QWidget):
         self.setPalette(palette)
         self.init_ui()
         self.work_thread()
-
-        config_private = 'config_private.ini'
-        self.config = configparser.ConfigParser()
-        with codecs.open(config_private, 'r', 'utf-8') as f:
-            # 读取配置文件内容
-            self.config = configparser.ConfigParser()
-            self.config.read_file(f)
-        openai.api_key = self.config.get("OpenAI", "api_key")
-        openai.api_base = self.config.get("OpenAI", "api_base")
 
     def init_ui(self):
         # 多行文本显示，显示所有的聊天信息

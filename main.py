@@ -1,14 +1,30 @@
 import os
 import sys
+import math
+import faiss
 import codecs
 import configparser
 import openai
 import random
+
+from generative_agent import GenerativeAgent
+from generative_agent_memory import GenerativeAgentMemory
+
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5 import QtWidgets
+
 from chat_client import ChatClient
+
+from datetime import datetime
+
+from langchain.chat_models import ChatOpenAI
+from langchain.docstore import InMemoryDocstore
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.retrievers import TimeWeightedVectorStoreRetriever
+from langchain.vectorstores import FAISS
+
 
 """
 Vega Bootstrap
@@ -81,6 +97,29 @@ class Vega(QWidget):
             self.config.read_file(f)
         openai.api_key = self.config.get("OpenAI", "api_key")
         openai.api_base = self.config.get("OpenAI", "api_base")
+        os.environ["OPENAI_API_KEY"] = self.config.get("OpenAI", "api_key")
+        os.environ["OPENAI_API_BASE"] = self.config.get("OpenAI", "api_base")
+        self.user_name = self.config.get("User", "name")
+        self.agent_name = self.config.get("Agent", "name")
+        traits = self.config.get("Agent", "traits")
+        status = self.config.get("Agent", "status")
+
+        # Init generative agent
+        language_model = ChatOpenAI(max_tokens=1500, model_name="gpt-3.5-turbo")  # Can be any LLM you want.
+        vega_memory = GenerativeAgentMemory(
+            llm=language_model,
+            memory_retriever=self.create_new_memory_retriever(),
+            verbose=False,
+            reflection_threshold=8  # we will give this a relatively low number to show how reflection works
+        )
+        self.agent = GenerativeAgent(
+            name=self.agent_name,
+            age=24,
+            traits=traits,
+            status=status,
+            llm=language_model,
+            memory=vega_memory
+        )
 
     def init_data(self):
         # singing
@@ -188,6 +227,29 @@ class Vega(QWidget):
     def on_widget2_position(self):
         widget2_pos = vega.pos()
         print(widget2_pos)
+
+
+    def relevance_score_fn(self, score: float) -> float:
+        """Return a similarity score on a scale [0, 1]."""
+        # This will differ depending on a few things:
+        # - the distance / similarity metric used by the VectorStore
+        # - the scale of your embeddings (OpenAI's are unit norm. Many others are not!)
+        # This function converts the euclidean norm of normalized embeddings
+        # (0 is most similar, sqrt(2) most dissimilar)
+        # to a similarity function (0 to 1)
+        return 1.0 - score / math.sqrt(2)
+
+
+    def create_new_memory_retriever(self):
+        """Create a new vector store retriever unique to the agent."""
+        # Define your embedding model
+        embeddings_model = OpenAIEmbeddings()
+        # Initialize the vectorstore as empty
+        embedding_size = 1536
+        index = faiss.IndexFlatL2(embedding_size)
+        vectorstore = FAISS(embeddings_model.embed_query, index,
+                            InMemoryDocstore({}), {}, relevance_score_fn=self.relevance_score_fn)
+        return TimeWeightedVectorStoreRetriever(vectorstore=vectorstore, other_score_keys=["importance"], k=15)
 
 
 if __name__ == '__main__':

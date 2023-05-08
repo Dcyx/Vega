@@ -9,7 +9,8 @@ from langchain.embeddings import OpenAIEmbeddings
 from langchain.retrievers import TimeWeightedVectorStoreRetriever
 from langchain.vectorstores import FAISS
 
-from langchain.experimental.generative_agents import GenerativeAgent, GenerativeAgentMemory
+from generative_agent import GenerativeAgent
+from generative_agent_memory import GenerativeAgentMemory
 
 """
 shoot for moon
@@ -26,7 +27,7 @@ with open(config_private, mode='r', encoding='utf-8') as f:
     config.read_file(f)
 os.environ["OPENAI_API_KEY"] = config.get("OpenAI", "api_key")
 os.environ["OPENAI_API_BASE"] = config.get("OpenAI", "api_base")
-
+USER_NAME = config.get("User", "name")
 
 def relevance_score_fn(score: float) -> float:
     """Return a similarity score on a scale [0, 1]."""
@@ -51,28 +52,21 @@ def create_new_memory_retriever():
     return TimeWeightedVectorStoreRetriever(vectorstore=vectorstore, other_score_keys=["importance"], k=15)
 
 
-def interview_agent(agent: GenerativeAgent, message: str) -> str:
-    """Help the notebook user interact with the agent."""
-    new_message = f"{USER_NAME} says {message}"
-    return agent.generate_dialogue_response(new_message)[1]
-
-
 # The name you want to use when interviewing the agent.
-USER_NAME = "Yancy"
 LLM = ChatOpenAI(max_tokens=1500, model_name="gpt-3.5-turbo")  # Can be any LLM you want.
-
 print(f"LLM = {LLM}")
 
+print("-------------")
 vega_memory = GenerativeAgentMemory(
     llm=LLM,
     memory_retriever=create_new_memory_retriever(),
     verbose=False,
     reflection_threshold=8  # we will give this a relatively low number to show how reflection works
 )
-vega_memory.pause_to_reflect()
-
+# vega_memory.pause_to_reflect()  #
 print(f"vega_memory = {vega_memory}")
 
+print("-------------")
 vega = GenerativeAgent(
     name="Vega",
     age=24,
@@ -81,12 +75,10 @@ vega = GenerativeAgent(
            "名字灵感来源于天琴座中最明亮的星星 织女一，同时织女也是中国古代爱情故事牛郎与织女中的角色。"
            "喜欢聊天, 用词都很随便. 希望玩梗. 喜欢开玩笑, 尤其喜欢调侃.",
     status="活泼, 幽默, 是 Yancy 的朋友",
-    memory_retriever=create_new_memory_retriever(),
     llm=LLM,
     memory=vega_memory
 )
 print(f"Vega = {vega}")
-print(vega.get_summary())
 
 # YANCY: 后续可用于启动时加载记忆?
 # # We can add memories directly to the memory object
@@ -96,10 +88,10 @@ print(vega.get_summary())
 #     vega.memory.add_memory(observation)
 
 print("-------------")
-print(vega.get_summary(force_refresh=True))
-print("-------------")
 while True:
     user_input = input(">> ")
     print(f"start to interview = {datetime.now()}")
-    msg = interview_agent(vega, user_input)
+    new_message = f"{USER_NAME} says {user_input}"
+    msg = vega.generate_dialogue_response(new_message)[1]
+
     print(f"get response = {datetime.now()}\n{msg}")

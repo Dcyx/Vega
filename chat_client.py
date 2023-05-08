@@ -10,8 +10,11 @@ from threading import Thread
 
 
 class ChatClient(QWidget):
-    def __init__(self, parent=None, **kwargs):
+    def __init__(self, parent, **kwargs):
         QtWidgets.QWidget.__init__(self)
+        self.agent = parent.agent
+        self.user_name = parent.user_name
+        self.agent_name = parent.agent_name
         self.setGeometry(parent.x() - 600, parent.y() + parent.height() - 337, 600, 337)
         self.setWindowTitle("Vega")
         self.setWindowFlags(Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶
@@ -64,16 +67,18 @@ class ChatClient(QWidget):
     # 发送消息 + 接收消息
     def send_msg(self):
         msg = self.message.text()
-        self.content.append("Me: " + msg)
+        self.content.append(f"{self.user_name}: {msg}")
 
         if msg.upper() == "Q" or "退下吧" in msg:
-            self.content.append("Vega: 切~ 臭屁! 拜拜 👋")
+            self.content.append(f"{self.agent_name}: 切~ 臭屁! 拜拜 👋")
             self.timer = QTimer(self)
             self.timer.timeout.connect(self.do_destroy)
             self.timer.start(300)
         else:
-            text_output = self.get_completion(msg)
-            self.content.append("Vega: " + text_output)
+            # text_output = self.get_completion(msg)
+            # self.content.append("Vega: " + text_output)
+            text_output = self.agent.generate_dialogue_response(f"{self.user_name} says {msg}")[1]
+            self.content.append(f"{self.agent_name}: {text_output}")
         self.message.clear()
 
     def do_destroy(self):

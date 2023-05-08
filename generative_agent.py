@@ -168,6 +168,7 @@ Relevant context:
         )
         full_result = self._generate_reaction(observation, call_to_action_template)
         result = full_result.strip().split("\n")[0]
+        print(f"----YANCY----\n{result}")
         if "GOODBYE:" in result:
             farewell = self._clean_response(result.split("GOODBYE:")[-1])
             self.memory.save_context(

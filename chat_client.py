@@ -71,19 +71,21 @@ class ChatClient(QWidget):
 
         if msg.upper() == "Q" or "退下吧" in msg:
             self.content.append(f"{self.agent_name}: 切~ 臭屁! 拜拜 👋")
-            self.timer = QTimer(self)
-            self.timer.timeout.connect(self.do_destroy)
-            self.timer.start(300)
+            self.delay_to_do(self.do_destroy)
         else:
-            # text_output = self.get_completion(msg)
-            # self.content.append("Vega: " + text_output)
-            text_output = self.agent.generate_dialogue_response(f"{self.user_name} says {msg}")[1]
+            continue_chat, text_output = self.agent.generate_dialogue_response(f"{self.user_name} says {msg}")
             self.content.append(f"{self.agent_name}: {text_output}")
+            if not continue_chat:
+                self.delay_to_do(self.do_destroy())
         self.message.clear()
+
+    def delay_to_do(self, slot):
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(slot)
+        self.timer.start(1000)
 
     def do_destroy(self):
         self.timer.stop()
-        time.sleep(2)
         self.destroy()
 
     # 接收消息

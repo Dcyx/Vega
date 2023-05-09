@@ -183,7 +183,10 @@ class GenerativeAgentMemory(BaseMemory):
         return []
 
     def load_memory_variables(self, inputs: Dict[str, Any]) -> Dict[str, str]:
-        """Return key-value pairs given the text input to the chain."""
+        """
+        Return key-value pairs given the text input to the chain.
+        Yancy: 这里可以融合 记忆检索 + 窗口内的对话上下文
+        """
         queries = inputs.get(self.queries_key)
         if queries is not None:
             relevant_memories = [
@@ -199,7 +202,7 @@ class GenerativeAgentMemory(BaseMemory):
             }
 
         most_recent_memories_token = inputs.get(self.most_recent_memories_token_key)
-        if most_recent_memories_token is not None:
+        if most_recent_memories_token is not None:  #
             return {
                 self.most_recent_memories_key: self._get_memories_until_limit(
                     most_recent_memories_token

@@ -68,15 +68,15 @@ class GenerativeAgent(BaseModel):
 
     def _get_entity_from_observation(self, observation: str) -> str:
         prompt = PromptTemplate.from_template(
-            "What is the observed entity in the following observation? {observation}"
+            "{observation}\n从以上观察中提取实体."
             + "\nEntity="
         )
         return self.chain(prompt).run(observation=observation).strip()
 
     def _get_entity_action(self, observation: str, entity_name: str) -> str:
         prompt = PromptTemplate.from_template(
-            "What is the {entity} doing in the following observation? {observation}"
-            + "\nThe {entity} is"
+            "{observation}\n基于上面给出的观察到的内容, 判断 {entity} 在做什么?"
+            + "\n{entity} 正在"
         )
         return (
             self.chain(prompt).run(entity=entity_name, observation=observation).strip()
@@ -86,45 +86,43 @@ class GenerativeAgent(BaseModel):
         """Summarize memories that are most relevant to an observation."""
         prompt = PromptTemplate.from_template(
             """
-{q1}?
-Context from memory:
+{q1}
+记忆中的上下文:
 {relevant_memories}
-Relevant context: 
+相关背景: 
 """
         )
         entity_name = self._get_entity_from_observation(observation)
         entity_action = self._get_entity_action(observation, entity_name)
-        q1 = f"What is the relationship between {self.name} and {entity_name}"
-        q2 = f"{entity_name} is {entity_action}"
-        return self.chain(prompt=prompt).run(q1=q1, queries=[q1, q2]).strip()
+        q1 = f"{self.name} 和 {entity_name} 之间的关系是?"
+        q2 = f"{entity_name} 在 {entity_action}"
+        return self.chain(prompt=prompt).run(q1=q1, queries=[q2]).strip()  # 将 queries 中的 q1 去掉了, "关系query" 易召回无关记忆
 
     def _generate_reaction(self, observation: str, suffix: str) -> str:
         """React to a given observation or dialogue act."""
         prompt = PromptTemplate.from_template(
-            "{agent_summary_description}"
-            + "\nIt is {current_time}."
-            + "\n{agent_name}'s status: {agent_status}"
-            + "\nSummary of relevant context from {agent_name}'s memory:"
-            + "\n{relevant_memories}"
-            + "\nMost recent observations: {most_recent_memories}"
-            + "\nObservation: {observation}"
+            "{agent_description}"
+            + "\n当前时间是: {current_time}."
+            + "\n{agent_name} 的状态包括: {agent_status}"
+            # + "\n{agent_name} 的相关上下文是:\n{relevant_memories}"  # 获取 agent 与 observation 中实体的关系
+            + "\n之前观测到的对话内容是: {most_recent_memories}"  # chain.run.prep_inputs 中注入 recent_memories, 但是粒度太粗,基本是所有上下文
+            + "\n当前观测到的对话内容是: {observation}"
             + "\n\n"
             + suffix
         )
-        agent_summary_description = self.get_summary()
-        relevant_memories_str = self.summarize_related_memories(observation)
+        agent_description = self.get_agent_description()  # 名字: {self.name} (年龄: {age})\n属性: {self.traits}\n{self.summary}
+        # relevant_memories_str = self.summarize_related_memories(observation)
         current_time_str = datetime.now().strftime("%B %d, %Y, %I:%M %p")
         kwargs: Dict[str, Any] = dict(
-            agent_summary_description=agent_summary_description,
+            agent_description=agent_description,
             current_time=current_time_str,
-            relevant_memories=relevant_memories_str,
+            # relevant_memories=relevant_memories_str,
             agent_name=self.name,
             observation=observation,
             agent_status=self.status,
         )
-        consumed_tokens = self.llm.get_num_tokens(
-            prompt.format(most_recent_memories="", **kwargs)
-        )
+        prompt_formatted = prompt.format(most_recent_memories="", **kwargs)
+        consumed_tokens = self.llm.get_num_tokens(prompt_formatted)
         kwargs[self.memory.most_recent_memories_token_key] = consumed_tokens
         return self.chain(prompt=prompt).run(**kwargs).strip()
 
@@ -162,20 +160,19 @@ Relevant context:
     def generate_dialogue_response(self, observation: str) -> Tuple[bool, str]:
         """React to a given observation."""
         call_to_action_template = (
-            "What would {agent_name} say? To end the conversation, write:"
-            ' GOODBYE: "what to say". Otherwise to continue the conversation,'
-            ' write: SAY: "what to say next"\n\n'
+            "如果要结束对话(告别), 就回复:GOODBYE: \"你要回复的内容\". 如果要继续对话, 就回复: SAY: \"你要回复的内容\"\n\n"
+            "基于以上信息, {agent_name} 会回复什么内容? "
         )
         full_result = self._generate_reaction(observation, call_to_action_template)
         result = full_result.strip().split("\n")[0]
-        print(f"----YANCY----\n{result}")
+        print(f"----dialogue_response----\n{result}")
         if "GOODBYE:" in result:
             farewell = self._clean_response(result.split("GOODBYE:")[-1])
             self.memory.save_context(
                 {},
                 {
-                    self.memory.add_memory_key: f"{self.name} observed "
-                    f"{observation} and said {farewell}"
+                    self.memory.add_memory_key: f"{self.name} 观测到 "
+                    f"{observation} ,回复了 {farewell}"
                 },
             )
             return False, f"{farewell}"
@@ -198,44 +195,29 @@ Relevant context:
     # summarizing the agent's self-description. This is  #
     # updated periodically through probing its memories  #
     ######################################################
+    # YANCY: this function is discarded
     def _compute_agent_summary(self) -> str:
         """"""
         prompt = PromptTemplate.from_template(
-            "How would you summarize {name}'s core characteristics given the"
-            + " following statements:\n"
-            + "{relevant_memories}"
-            + "Do not embellish."
-            + "\n\nSummary: "
+            "基于给出的描述:\n{relevant_memories},\n总结 {name} 的核心人物特征. 进行合理的推断和总结, 不要胡乱联想. 总结内容:"
         )
         # The agent seeks to think about their core characteristics.
         return (
             self.chain(prompt)
-            .run(name=self.name, queries=[f"{self.name}'s core characteristics"])
+            .run(name=self.name, queries=[f"{self.name} 的核心人物特征"])
             .strip()
         )
 
-    def get_summary(self, force_refresh: bool = False) -> str:
+    def get_agent_description(self) -> str:
         """Return a descriptive summary of the agent."""
-        current_time = datetime.now()
-        since_refresh = (current_time - self.last_refreshed).seconds
-        if (
-            not self.summary
-            or since_refresh >= self.summary_refresh_seconds
-            or force_refresh
-        ):
-            self.summary = self._compute_agent_summary()
-            self.last_refreshed = current_time
         age = self.age if self.age is not None else "N/A"
-        return (
-            f"Name: {self.name} (age: {age})"
-            + f"\nInnate traits: {self.traits}"
-            + f"\n{self.summary}"
-        )
+        return f"名字: {self.name} (年龄: {age})\n属性: {self.traits}"
 
     def get_full_header(self, force_refresh: bool = False) -> str:
         """Return a full header of the agent's status, summary, and current time."""
-        summary = self.get_summary(force_refresh=force_refresh)
+        description = self.get_agent_description()
         current_time_str = datetime.now().strftime("%B %d, %Y, %I:%M %p")
+        print(f"----YANCY----get_full_header----self.summary\n{self.summary}")
         return (
-            f"{summary}\nIt is {current_time_str}.\n{self.name}'s status: {self.status}"
+            f"{description}\n当前时间是: {current_time_str}.\n{self.name} 的状态是: {self.status}"
         )

@@ -73,10 +73,10 @@ class ChatClient(QWidget):
             self.content.append(f"{self.agent_name}: 切~ 臭屁! 拜拜 👋")
             self.delay_to_do(self.do_destroy)
         else:
-            continue_chat, text_output = self.agent.generate_dialogue_response(f"{self.user_name} says {msg}")
+            continue_chat, text_output = self.agent.generate_dialogue_response(f"{self.user_name} 说: {msg}")
             self.content.append(f"{self.agent_name}: {text_output}")
             if not continue_chat:
-                self.delay_to_do(self.do_destroy())
+                self.delay_to_do(self.do_destroy)
         self.message.clear()
 
     def delay_to_do(self, slot):

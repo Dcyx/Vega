@@ -106,7 +106,7 @@ class GenerativeAgent(BaseModel):
             + "\n当前时间是: {current_time}."
             + "\n{agent_name} 的状态包括: {agent_status}"
             # + "\n{agent_name} 的相关上下文是:\n{relevant_memories}"  # 获取 agent 与 observation 中实体的关系
-            + "\n之前观测到的对话内容是: {most_recent_memories}"  # chain.run.prep_inputs 中注入 recent_memories, 但是粒度太粗,基本是所有上下文
+            + "\n相关记忆包括: {relevant_memories}"  # chain.run.prep_inputs 中注入 recent_memories, 但是粒度太粗,基本是所有上下文
             + "\n当前观测到的对话内容是: {observation}"
             + "\n\n"
             + suffix
@@ -120,11 +120,10 @@ class GenerativeAgent(BaseModel):
             observation=observation,
             agent_status=self.status,
         )
-        prompt_formatted = prompt.format(most_recent_memories="", **kwargs)
-        consumed_tokens = self.llm.get_num_tokens(prompt_formatted)
-        kwargs[self.memory.most_recent_memories_token_key] = consumed_tokens
-        kwargs["queries"] = observation
-        return self.chain(prompt=prompt).run(**kwargs).strip()
+        # prompt_formatted = prompt.format(relevant_memories="", **kwargs)
+        # consumed_tokens = self.llm.get_num_tokens(prompt_formatted)
+        # kwargs[self.memory.most_recent_memories_token_key] = consumed_tokens
+        return self.chain(prompt=prompt).run(queries=[observation], **kwargs).strip()
 
     def _clean_response(self, text: str) -> str:
         return re.sub(f"^{self.name} ", "", text.strip()).strip()

@@ -188,27 +188,20 @@ class GenerativeAgentMemory(BaseMemory):
         Yancy: 这里可以融合 记忆检索 + 窗口内的对话上下文
         """
         queries = inputs.get(self.queries_key)
+        memory_dict = {}
+        # 基于 queries 检索 memory
         if queries is not None:
             relevant_memories = [
                 mem for query in queries for mem in self.fetch_memories(query)
             ]
-            return {
-                self.relevant_memories_key: self.format_memories_detail(
-                    relevant_memories
-                ),
-                self.relevant_memories_simple_key: self.format_memories_simple(
-                    relevant_memories
-                ),
-            }
+            memory_dict[self.relevant_memories_key] = self.format_memories_detail(relevant_memories)
+            memory_dict[self.relevant_memories_simple_key] = self.format_memories_simple(relevant_memories)
 
-        most_recent_memories_token = inputs.get(self.most_recent_memories_token_key)
-        if most_recent_memories_token is not None:  #
-            return {
-                self.most_recent_memories_key: self._get_memories_until_limit(
-                    most_recent_memories_token
-                )
-            }
-        return {}
+        # # 拼接 最近一段时间的 memory
+        # most_recent_memories_token = inputs.get(self.most_recent_memories_token_key)
+        # if most_recent_memories_token is not None:  #
+        #     memory_dict[self.most_recent_memories_key] = self._get_memories_until_limit(most_recent_memories_token)
+        return memory_dict
 
     def save_context(self, inputs: Dict[str, Any], outputs: Dict[str, str]) -> None:
         """Save the context of this model run to memory."""

@@ -82,6 +82,7 @@ class GenerativeAgent(BaseModel):
             self.chain(prompt).run(entity=entity_name, observation=observation).strip()
         )
 
+    # Yancy: this function is discarded: 不需要获取实体及关系, 短期也没必要对 observation 进行抽象.
     def summarize_related_memories(self, observation: str) -> str:
         """Summarize memories that are most relevant to an observation."""
         prompt = PromptTemplate.from_template(
@@ -111,12 +112,10 @@ class GenerativeAgent(BaseModel):
             + suffix
         )
         agent_description = self.get_agent_description()  # 名字: {self.name} (年龄: {age})\n属性: {self.traits}\n{self.summary}
-        # relevant_memories_str = self.summarize_related_memories(observation)
         current_time_str = datetime.now().strftime("%B %d, %Y, %I:%M %p")
         kwargs: Dict[str, Any] = dict(
             agent_description=agent_description,
             current_time=current_time_str,
-            # relevant_memories=relevant_memories_str,
             agent_name=self.name,
             observation=observation,
             agent_status=self.status,
@@ -124,6 +123,7 @@ class GenerativeAgent(BaseModel):
         prompt_formatted = prompt.format(most_recent_memories="", **kwargs)
         consumed_tokens = self.llm.get_num_tokens(prompt_formatted)
         kwargs[self.memory.most_recent_memories_token_key] = consumed_tokens
+        kwargs["queries"] = observation
         return self.chain(prompt=prompt).run(**kwargs).strip()
 
     def _clean_response(self, text: str) -> str:

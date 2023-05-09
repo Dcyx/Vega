@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
-
 from langchain import LLMChain
 from langchain.base_language import BaseLanguageModel
 from generative_agent_memory import GenerativeAgentMemory
@@ -47,7 +46,7 @@ class GenerativeAgent(BaseModel):
     """The last time the character's summary was regenerated."""
 
     daily_summaries: List[str] = Field(default_factory=list)  # : :meta private:
-    """Summary of the events in the plan that the agent took."""
+    """Summary of the events in the plan that the vector took."""
 
     class Config:
         """Configuration for this pydantic object."""
@@ -88,7 +87,7 @@ class GenerativeAgent(BaseModel):
             "{agent_description}"
             + "\n当前时间是: {current_time}."
             + "\n{agent_name} 的状态包括: {agent_status}"
-            # + "\n{agent_name} 的相关上下文是:\n{relevant_memories}"  # 获取 agent 与 observation 中实体的关系
+            # + "\n{agent_name} 的相关上下文是:\n{relevant_memories}"  # 获取 vector 与 observation 中实体的关系
             + "\n相关记忆包括: {relevant_memories}"  # chain.run.prep_inputs 中注入 recent_memories, 但是粒度太粗,基本是所有上下文
             + "\n当前观测到的对话内容是: {observation}"
             + "\n\n"
@@ -169,12 +168,12 @@ class GenerativeAgent(BaseModel):
             return True, result
 
     def get_agent_description(self) -> str:
-        """Return a descriptive summary of the agent."""
+        """Return a descriptive summary of the vector."""
         age = self.age if self.age is not None else "N/A"
         return f"名字: {self.name} (年龄: {age})\n属性: {self.traits}"
 
     def get_full_header(self, force_refresh: bool = False) -> str:
-        """Return a full header of the agent's status, summary, and current time."""
+        """Return a full header of the vector's status, summary, and current time."""
         description = self.get_agent_description()
         current_time_str = datetime.now().strftime("%B %d, %Y, %I:%M %p")
         print(f"----YANCY----get_full_header----self.summary\n{self.summary}")

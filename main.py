@@ -109,7 +109,7 @@ class Vega(QWidget):
         vega_memory = GenerativeAgentMemory(
             llm=language_model,
             memory_retriever=self.create_new_memory_retriever(),
-            verbose=False,
+            verbose=True,
             reflection_threshold=8  # we will give this a relatively low number to show how reflection works
         )
         self.agent = GenerativeAgent(
@@ -118,7 +118,8 @@ class Vega(QWidget):
             traits=traits,
             status=status,
             llm=language_model,
-            memory=vega_memory
+            memory=vega_memory,
+            verbose=True
         )
 
     def init_data(self):

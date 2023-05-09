@@ -151,7 +151,9 @@ class GenerativeAgentMemory(BaseMemory):
 
     def fetch_memories(self, observation: str) -> List[Document]:
         """Fetch related memories."""
-        return self.memory_retriever.get_relevant_documents(observation)
+        related_memories = self.memory_retriever.get_relevant_documents(observation)
+        print(f"----Yancy----\n{related_memories}")
+        return related_memories
 
     def format_memories_detail(self, relevant_memories: List[Document]) -> str:
         content_strs = set()

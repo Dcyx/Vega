@@ -10,6 +10,9 @@ import random
 from generative_agent import GenerativeAgent
 from generative_agent_memory import GenerativeAgentMemory
 
+from typing import Optional
+
+
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
@@ -17,13 +20,14 @@ from PyQt5 import QtWidgets
 
 from chat_client import ChatClient
 
-from datetime import datetime
-
 from langchain.chat_models import ChatOpenAI
 from langchain.docstore import InMemoryDocstore
 from langchain.embeddings import OpenAIEmbeddings
-from langchain.retrievers import TimeWeightedVectorStoreRetriever
+# from langchain.retrievers import TimeWeightedVectorStoreRetriever
 from langchain.vectorstores import FAISS
+
+from vector.vector_store_retriever import TimeWeightedVectorStoreRetriever
+
 
 
 """
@@ -37,6 +41,7 @@ Vega: My first virtual companion
 """
 
 icon = os.path.join('img/icon.png')
+FAISS_DIR = "data/index"
 
 
 def get_images(pics):
@@ -99,19 +104,39 @@ class Vega(QWidget):
         openai.api_base = self.config.get("OpenAI", "api_base")
         os.environ["OPENAI_API_KEY"] = self.config.get("OpenAI", "api_key")
         os.environ["OPENAI_API_BASE"] = self.config.get("OpenAI", "api_base")
+
+        # TODO 用户id应该是生成的不应该是写死的，应该支持多用户
         self.user_name = self.config.get("User", "name")
+        self.user_id = self.config.get("User", "id")
+
         self.agent_name = self.config.get("Agent", "name")
         traits = self.config.get("Agent", "traits")
         status = self.config.get("Agent", "status")
 
-        # Init generative agent
+        # Init generative vector
         language_model = ChatOpenAI(max_tokens=1500, model_name="gpt-3.5-turbo")  # Can be any LLM you want.
-        vega_memory = GenerativeAgentMemory(
-            llm=language_model,
-            memory_retriever=self.create_new_memory_retriever(),
-            verbose=True,
-            reflection_threshold=8  # we will give this a relatively low number to show how reflection works
-        )
+
+        # 先根据 id 判断当前用户的记忆是否存在
+        self.user_memory_dir = os.path.join(FAISS_DIR, self.user_id)
+        if not os.path.exists(self.user_memory_dir):
+            os.makedirs(self.user_memory_dir, exist_ok=True)
+
+        if len(os.listdir(self.user_memory_dir)) == 0:
+            vega_memory = GenerativeAgentMemory(
+                llm=language_model,
+                memory_retriever=self.create_new_memory_retriever(load_memory=False),
+                verbose=False,
+                reflection_threshold=8  # we will give this a relatively low number to show how reflection works
+            )
+        else:
+            print(f"load memory from {self.user_memory_dir}")
+            vega_memory = GenerativeAgentMemory(
+                llm=language_model,
+                memory_retriever=self.create_new_memory_retriever(load_memory=True, user_memory_dir=self.user_memory_dir),
+                verbose=False,
+                reflection_threshold=8
+            )
+
         self.agent = GenerativeAgent(
             name=self.agent_name,
             age=24,
@@ -240,9 +265,8 @@ class Vega(QWidget):
         # to a similarity function (0 to 1)
         return 1.0 - score / math.sqrt(2)
 
-
-    def create_new_memory_retriever(self):
-        """Create a new vector store retriever unique to the agent."""
+    def create_new_memory_retriever(self, load_memory=False, user_memory_dir=None):
+        """Create a new vector store retriever unique to the vector."""
         # Define your embedding model
         embeddings_model = OpenAIEmbeddings()
         # Initialize the vectorstore as empty
@@ -250,7 +274,11 @@ class Vega(QWidget):
         index = faiss.IndexFlatL2(embedding_size)
         vectorstore = FAISS(embeddings_model.embed_query, index,
                             InMemoryDocstore({}), {}, relevance_score_fn=self.relevance_score_fn)
-        return TimeWeightedVectorStoreRetriever(vectorstore=vectorstore, other_score_keys=["importance"], k=15)
+        retriever = TimeWeightedVectorStoreRetriever(vectorstore=vectorstore, other_score_keys=["importance"], k=15)
+
+        if load_memory:
+            retriever.load_memories_from_local(user_memory_dir, embeddings_model)
+        return retriever
 
 
 if __name__ == '__main__':

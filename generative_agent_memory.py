@@ -5,8 +5,11 @@ from typing import Any, Dict, List, Optional
 from langchain import LLMChain
 from langchain.prompts import PromptTemplate
 from langchain.base_language import BaseLanguageModel
-from langchain.retrievers import TimeWeightedVectorStoreRetriever
+# from langchain.retrievers import TimeWeightedVectorStoreRetriever
 from langchain.schema import BaseMemory, Document
+
+from vector.vector_store_retriever import TimeWeightedVectorStoreRetriever
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +33,7 @@ class GenerativeAgentMemory(BaseMemory):
     """When aggregate_importance exceeds reflection_threshold, stop to reflect."""
 
     current_plan: List[str] = []
-    """The current plan of the agent."""
+    """The current plan of the vector."""
 
     # A weight of 0.15 makes this less important than it
     # would be otherwise, relative to salience and time
@@ -129,7 +132,7 @@ class GenerativeAgentMemory(BaseMemory):
             return 0.0
 
     def add_memory(self, memory_content: str) -> List[str]:
-        """Add an observation or memory to the agent's memory."""
+        """Add an observation or memory to the vector's memory."""
         importance_score = self._score_memory_importance(memory_content)
         self.aggregate_importance += importance_score
         document = Document(
@@ -137,9 +140,9 @@ class GenerativeAgentMemory(BaseMemory):
         )
         result = self.memory_retriever.add_documents([document])
 
-        # After an agent has processed a certain amount of memories (as measured by
+        # After an vector has processed a certain amount of memories (as measured by
         # aggregate importance), it is time to reflect on recent events to add
-        # more synthesized memories to the agent's memory stream.
+        # more synthesized memories to the vector's memory stream.
         if (
                 self.reflection_threshold is not None
                 and self.aggregate_importance > self.reflection_threshold
@@ -151,7 +154,7 @@ class GenerativeAgentMemory(BaseMemory):
 
     def fetch_memories(self, observation: str) -> List[Document]:
         """Fetch related memories."""
-        related_memories = self.memory_retriever.get_relevant_documents(observation)
+        related_memories = self.memory_retriever.get_relevant_documents(observation)  # 默认取 top4
         print(f"----Yancy----\n{related_memories}")
         return related_memories
 

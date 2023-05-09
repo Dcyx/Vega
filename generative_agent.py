@@ -1,14 +1,14 @@
 import re
-from generative_agent_memory import GenerativeAgentMemory
-
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
+
 from langchain import LLMChain
+from langchain.base_language import BaseLanguageModel
+from generative_agent_memory import GenerativeAgentMemory
 from langchain.prompts import PromptTemplate
-from langchain.schema import BaseLanguageModel
 
 """
 Generative Agents reproduce based on LangChain 
@@ -82,23 +82,6 @@ class GenerativeAgent(BaseModel):
             self.chain(prompt).run(entity=entity_name, observation=observation).strip()
         )
 
-    # Yancy: this function is discarded: 不需要获取实体及关系, 短期也没必要对 observation 进行抽象.
-    def summarize_related_memories(self, observation: str) -> str:
-        """Summarize memories that are most relevant to an observation."""
-        prompt = PromptTemplate.from_template(
-            """
-{q1}
-记忆中的上下文:
-{relevant_memories}
-相关背景: 
-"""
-        )
-        entity_name = self._get_entity_from_observation(observation)
-        entity_action = self._get_entity_action(observation, entity_name)
-        q1 = f"{self.name} 和 {entity_name} 之间的关系是?"
-        q2 = f"{entity_name} 在 {entity_action}"
-        return self.chain(prompt=prompt).run(q1=q1, queries=[q2]).strip()  # 将 queries 中的 q1 去掉了, "关系query" 易召回无关记忆
-
     def _generate_reaction(self, observation: str, suffix: str) -> str:
         """React to a given observation or dialogue act."""
         prompt = PromptTemplate.from_template(
@@ -120,9 +103,6 @@ class GenerativeAgent(BaseModel):
             observation=observation,
             agent_status=self.status,
         )
-        # prompt_formatted = prompt.format(relevant_memories="", **kwargs)
-        # consumed_tokens = self.llm.get_num_tokens(prompt_formatted)
-        # kwargs[self.memory.most_recent_memories_token_key] = consumed_tokens
         return self.chain(prompt=prompt).run(queries=[observation], **kwargs).strip()
 
     def _clean_response(self, text: str) -> str:
@@ -186,26 +166,7 @@ class GenerativeAgent(BaseModel):
             )
             return True, f"{response_text}"
         else:
-            return False, result
-
-    ######################################################
-    # Agent stateful' summary methods.                   #
-    # Each dialog or response prompt includes a header   #
-    # summarizing the agent's self-description. This is  #
-    # updated periodically through probing its memories  #
-    ######################################################
-    # YANCY: this function is discarded
-    def _compute_agent_summary(self) -> str:
-        """"""
-        prompt = PromptTemplate.from_template(
-            "基于给出的描述:\n{relevant_memories},\n总结 {name} 的核心人物特征. 进行合理的推断和总结, 不要胡乱联想. 总结内容:"
-        )
-        # The agent seeks to think about their core characteristics.
-        return (
-            self.chain(prompt)
-            .run(name=self.name, queries=[f"{self.name} 的核心人物特征"])
-            .strip()
-        )
+            return True, result
 
     def get_agent_description(self) -> str:
         """Return a descriptive summary of the agent."""

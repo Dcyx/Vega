@@ -4,8 +4,9 @@ from typing import Any, Dict, List, Optional
 
 from langchain import LLMChain
 from langchain.prompts import PromptTemplate
+from langchain.base_language import BaseLanguageModel
 from langchain.retrievers import TimeWeightedVectorStoreRetriever
-from langchain.schema import BaseLanguageModel, BaseMemory, Document
+from langchain.schema import BaseMemory, Document
 
 logger = logging.getLogger(__name__)
 

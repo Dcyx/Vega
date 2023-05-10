@@ -75,6 +75,7 @@ class GenerativeAgentMemory(BaseMemory):
         observations = self.memory_retriever.memory_stream[-last_k:]
         observation_str = "\n".join([o.page_content for o in observations])
         result = self.chain(prompt).run(observations=observation_str)
+        print(f"----Yancy----\n{result}\n")
         return self._parse_list(result)
 
     def _get_insights_on_topic(self, topic: str) -> List[str]:
@@ -114,20 +115,20 @@ class GenerativeAgentMemory(BaseMemory):
     def _score_memory_importance(self, memory_content: str) -> float:
         """Score the absolute importance of the given memory."""
         prompt = PromptTemplate.from_template(
-            "On the scale of 1 to 10, where 1 is purely mundane"
-            + " (e.g., brushing teeth, making bed) and 10 is"
-            + " extremely poignant (e.g., a break up, college"
-            + " acceptance), rate the likely poignancy of the"
-            + " following piece of memory. Respond with a single integer."
-            + "\nMemory: {memory_content}"
-            + "\nRating: "
+            "在 1 到 5的等级上。其中 1 是绝对平凡、琐碎日常的事情，例如：刷牙、洗脸、上厕所。"
+            + "3 是需要较大精力和时间来处理的事情，例如：搬家、换工作、轻伤、面试。"
+            + "5 是非常重大的事件，可能会引起深刻的心理和情感反应，例如：亲友意外死亡、自己结婚怀孕、子女降生等。"
+            + "请评估以下记忆片段可能的等级。仅回复单个整数。 "
+            + "\n记忆片段：{memory_content}"
+            + "\n等级："
         )
         score = self.chain(prompt).run(memory_content=memory_content).strip()
+        print(f"----Yancy----\n{score}\n")
         if self.verbose:
             logger.info(f"Importance score: {score}")
         match = re.search(r"^\D*(\d+)", score)
         if match:
-            return (float(score[0]) / 10) * self.importance_weight
+            return (float(score[0]) / 5) * self.importance_weight
         else:
             return 0.0
 
@@ -155,19 +156,32 @@ class GenerativeAgentMemory(BaseMemory):
     def fetch_memories(self, observation: str) -> List[Document]:
         """Fetch related memories."""
         related_memories = self.memory_retriever.get_relevant_documents(observation)  # 默认取 top4
-        print(f"----Yancy----\n{related_memories}")
         return related_memories
 
-    def format_memories_detail(self, relevant_memories: List[Document]) -> str:
+    def _filter_irrelevant_memory(self, memories_str, queries: List[str]) -> str:
+        # TODO: 记忆列表可能过长!
+        prompt = PromptTemplate.from_template(
+            "记忆列表："
+            "{memories_str}"
+            "\n\n历史对话信息: '{context}'"
+            "\n\n对记忆列表中的内容进行过滤，只保留与对话信息中的聊天话题、事件及后续可能的进展相关的记忆，并用换行符分隔展示。如果没有任何可能关联的记忆, 则返回空字符串"
+            "\n相关记忆："
+        )
+        response = self.chain(prompt=prompt).run(memories_str=memories_str, context="; ".join([query.replace("\n", "; ").strip() for query in queries])).strip()
+        print(f"----Yancy----\n{response}\n")
+        return response
+
+    def format_memories_detail(self, relevant_memories: List[Document], queries: List[str]) -> str:
         content_strs = set()
         content = []
         for mem in relevant_memories:
             if mem.page_content in content_strs:
                 continue
             content_strs.add(mem.page_content)
-            created_time = mem.metadata["created_at"].strftime("%B %d, %Y, %I:%M %p")
+            created_time = mem.metadata["created_at"].strftime("%B %d, %Y")
             content.append(f"- {created_time}: {mem.page_content.strip()}")
-        return "\n".join([f"{mem}" for mem in content])
+        memories_str = "\n".join([f"{mem}" for mem in content[:5]])
+        return self._filter_irrelevant_memory(memories_str, queries)
 
     def format_memories_simple(self, relevant_memories: List[Document]) -> str:
         return "; ".join([f"{mem.page_content}" for mem in relevant_memories])
@@ -191,7 +205,6 @@ class GenerativeAgentMemory(BaseMemory):
     def load_memory_variables(self, inputs: Dict[str, Any]) -> Dict[str, str]:
         """
         Return key-value pairs given the text input to the chain.
-        Yancy: 这里可以融合 记忆检索 + 窗口内的对话上下文
         """
         queries = inputs.get(self.queries_key)
         memory_dict = {}
@@ -200,13 +213,9 @@ class GenerativeAgentMemory(BaseMemory):
             relevant_memories = [
                 mem for query in queries for mem in self.fetch_memories(query)
             ]
-            memory_dict[self.relevant_memories_key] = self.format_memories_detail(relevant_memories)
-            memory_dict[self.relevant_memories_simple_key] = self.format_memories_simple(relevant_memories)
-
-        # # 拼接 最近一段时间的 memory
-        # most_recent_memories_token = inputs.get(self.most_recent_memories_token_key)
-        # if most_recent_memories_token is not None:  #
-        #     memory_dict[self.most_recent_memories_key] = self._get_memories_until_limit(most_recent_memories_token)
+            # YANCY: 过滤掉无关记忆
+            memory_dict[self.relevant_memories_key] = self.format_memories_detail(relevant_memories, queries)
+            # memory_dict[self.relevant_memories_simple_key] = self.format_memories_simple(relevant_memories)
         return memory_dict
 
     def save_context(self, inputs: Dict[str, Any], outputs: Dict[str, str]) -> None:

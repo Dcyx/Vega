@@ -110,8 +110,9 @@ class Vega(QWidget):
         self.user_id = self.config.get("User", "id")
 
         self.agent_name = self.config.get("Agent", "name")
+        self.age = self.config.get("Agent", "age")
         traits = self.config.get("Agent", "traits")
-        status = self.config.get("Agent", "status")
+        relation = self.config.get("Agent", "relation")
 
         # Init generative vector
         language_model = ChatOpenAI(max_tokens=1500, model_name="gpt-3.5-turbo")  # Can be any LLM you want.
@@ -125,7 +126,7 @@ class Vega(QWidget):
             vega_memory = GenerativeAgentMemory(
                 llm=language_model,
                 memory_retriever=self.create_new_memory_retriever(load_memory=False),
-                verbose=False,
+                verbose=True,
                 reflection_threshold=8  # we will give this a relatively low number to show how reflection works
             )
         else:
@@ -133,15 +134,15 @@ class Vega(QWidget):
             vega_memory = GenerativeAgentMemory(
                 llm=language_model,
                 memory_retriever=self.create_new_memory_retriever(load_memory=True, user_memory_dir=self.user_memory_dir),
-                verbose=False,
+                verbose=True,
                 reflection_threshold=8
             )
 
         self.agent = GenerativeAgent(
             name=self.agent_name,
-            age=24,
+            age=self.age,
             traits=traits,
-            status=status,
+            relation=relation,
             llm=language_model,
             memory=vega_memory,
             verbose=True
@@ -197,6 +198,8 @@ class Vega(QWidget):
         self.move(x, y)
 
     def quit(self):
+        # 保存记忆
+        self.agent.memory.memory_retriever.save_memories_to_local(self.user_memory_dir)
         self.close()
         sys.exit()
 

@@ -1,4 +1,7 @@
-"""Retriever that combines embedding similarity with recency in retrieving values."""
+"""
+Retriever that combines embedding similarity with recency in retrieving values.
+TODO 修改 memory stream 逻辑，聊天记录和 memory 拆分
+"""
 from copy import deepcopy
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -25,6 +28,7 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
     """Keyword arguments to pass to the vectorstore similarity search."""
 
     # TODO: abstract as a queue
+    # 作为消息快照的存储，跟原本的 memory 解耦
     memory_stream: List[Document] = Field(default_factory=list)
     """The memory_stream of documents to search through."""
 
@@ -74,10 +78,13 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
             query, **self.search_kwargs
         )
         results = {}
+        # TODO 原代码里的 buffer id 怀疑是想记录现在内存 or redis 里是否存了聊天，从而从 memory  stream 里拿
+        # TODO 即 memory-stream 的内容 buffer-id 是一一对应的，但是目前还没看出来有更多的作用
         for fetched_doc, relevance in docs_and_scores:
             if "buffer_idx" in fetched_doc.metadata:
                 buffer_idx = fetched_doc.metadata["buffer_idx"]
-                doc = self.memory_stream[buffer_idx]
+                # doc = self.memory_stream[buffer_idx]
+                doc = fetched_doc
                 results[buffer_idx] = (doc, relevance)
         return results
 
@@ -112,7 +119,7 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
     ):
         """
         从本地 fassi 加载 memory
-        定制方法，仅针对 faiss （其他向量库不兼容）
+        TODO 定制方法，仅针对 faiss （用于加载记忆调试 memory 逻辑，后面替换成 milvus 后可删除）
         :return:
         """
         self.vectorstore = self.vectorstore.load_local(
@@ -131,7 +138,7 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
     def save_memories_to_local(self, folder_path: str):
         '''
         把记忆存在本地
-        定制方法，仅针对 faiss （其他向量库不兼容）
+        TODO 定制方法，仅针对 faiss （用于加载记忆调试 memory 逻辑，后面替换成 milvus 后可删除）
         :return:
         '''
         self.vectorstore.save_local(folder_path)

@@ -159,7 +159,6 @@ class GenerativeAgentMemory(BaseMemory):
         return related_memories
 
     def _filter_irrelevant_memory(self, memories_str, queries: List[str]) -> str:
-        # TODO: 记忆列表可能过长!
         prompt = PromptTemplate.from_template(
             "记忆列表："
             "{memories_str}"

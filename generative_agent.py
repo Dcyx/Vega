@@ -72,12 +72,12 @@ class GenerativeAgent(BaseModel):
             + "\n当前时间是: {current_time}."
             + "\n当前场景下对 {agent_name} 的要求包括: {agent_claim}"
             + "\n相关记忆包括: {relevant_memories}"  # chain.run.prep_inputs 中检索 relevant_memories
-            + "\n回复内容的要求: 不要直接将背景信息作为回复,而是在此基础上进行推断."
+            + "\n回复内容的要求: 不要直接将背景信息作为回复,而是在此基础上进行推断. 回答的简洁一点,不要太啰嗦,要注意对话上下文."
               "\n\n如果回复内容中包含告别的语义, 例如 拜拜、再见、下次再聊等, 就回复:GOODBYE: \"你要回复的内容\". 如果要继续对话, 就回复: SAY: \"你要回复的内容\""
             + "\n\n基于观测到的聊天信息 '{observation}', {agent_name} 会回复什么内容?"
         )
         agent_description = self.get_agent_description()
-        agent_claim, obs_summary = self.get_agent_claim(observation=observation)
+        agent_claim, obs_summary = self.get_agent_claim(agent_description=agent_description, observation=observation)
         current_time_str = datetime.now().strftime("%B %d, %Y, %I:%M %p")
         kwargs: Dict[str, Any] = dict(
             agent_description=agent_description,
@@ -90,10 +90,11 @@ class GenerativeAgent(BaseModel):
         print(f"----Yancy----\n{response}\n")
         return response
 
-    def get_agent_claim(self, observation: str) -> str:
+    def get_agent_claim(self, agent_description, observation: str) -> str:
         """
-        概括当前情境,检索相关记忆并提炼 agent_claim, 返回 claim 和 observation 的抽象
+        对当前情境进行抽象. 检索相关记忆并提炼 agent_claim, 返回 claim 和 observation 的抽象
         """
+        # TODO:  backward,forward
         prompt_obs_summary = PromptTemplate.from_template(
             "{observation}"
             "\n基于以上对话内容,对消息中的场景、人物关系、事件等进行抽象, 总结成一句话. 不要过程,直接给结论."
@@ -102,14 +103,16 @@ class GenerativeAgent(BaseModel):
         obs_summary = self.chain(prompt_obs_summary).run(observation=observation).strip()
         obs_summary = re.sub(r"(\n)+", "; ", obs_summary).strip()
         print(f"----Yancy----\n{obs_summary}\n")
-        # TODO: 优化 prompt
+
+        # TODO: 优化 agent 目标定义
         prompt = PromptTemplate.from_template(
-            "相关记忆:"
+            "个人信息:{agent_description}"
+            "\n相关记忆:"
             "\n{relevant_memories}"
-            "\n推测 {agent_name} 对情境 '{scene}' 中的发生的事情应该抱有什么样的情感, 如何看待及解决可能有的问题?不要过程,直接给结论."
+            "\n基于自身信息和相关记忆, 推测 {agent_name} 面对情境 '{scene}' 中的内容, 要如何做才能既符合个人性格又能满足情境下可能的诉求?不要过程,直接给结论."
             "\n\n"
         )
-        result = self.chain(prompt).run(queries=[observation, obs_summary], scene=obs_summary, agent_name=self.name).strip()
+        result = self.chain(prompt).run(queries=[observation, obs_summary], agent_description=agent_description, scene=obs_summary, agent_name=self.name).strip()
         print(f"----Yancy----\n{result}\n")
         return result, obs_summary
 

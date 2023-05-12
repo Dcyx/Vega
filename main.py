@@ -9,6 +9,7 @@ import random
 
 from generative_agent import GenerativeAgent
 from generative_agent_memory import GenerativeAgentMemory
+from generative_agent_context import GenerativeAgentContext
 
 from typing import Optional
 
@@ -24,7 +25,7 @@ from langchain.chat_models import ChatOpenAI
 from langchain.docstore import InMemoryDocstore
 from langchain.embeddings import OpenAIEmbeddings
 # from langchain.retrievers import TimeWeightedVectorStoreRetriever
-from langchain.vectorstores import FAISS
+from langchain.vectorstores import FAISS, milvus
 
 from vector.vector_store_retriever import TimeWeightedVectorStoreRetriever
 
@@ -137,7 +138,7 @@ class Vega(QWidget):
                 verbose=True,
                 reflection_threshold=8
             )
-
+        vega_context = GenerativeAgentContext()
         self.agent = GenerativeAgent(
             name=self.agent_name,
             age=self.age,
@@ -145,6 +146,7 @@ class Vega(QWidget):
             relation=relation,
             llm=language_model,
             memory=vega_memory,
+            context=vega_context,
             verbose=True
         )
 
@@ -199,7 +201,6 @@ class Vega(QWidget):
 
     def quit(self):
         # 保存记忆
-        self.agent.memory.memory_retriever.save_memories_to_local(self.user_memory_dir)
         self.close()
         sys.exit()
 

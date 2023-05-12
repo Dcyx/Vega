@@ -130,11 +130,6 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
             # 修改后：直接取
             doc.metadata["last_accessed_at"] = current_time
             result.append(doc)
-        print("---" * 20)
-        print("\t[get_relevant_documents] result")
-        for r in result:
-            print(f"\t\ttes = {r}")
-        print("---" * 20)
         return result
 
     def load_memories_from_local(
@@ -166,6 +161,7 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
         """
         Add documents to vectorstore.
         """
+        print(f"\t>> [retriever] add_documents documents = {documents}")
         current_time = kwargs.get("current_time", datetime.now())
         # Avoid mutating input documents
         dup_docs = [deepcopy(d) for d in documents]

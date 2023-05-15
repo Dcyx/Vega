@@ -9,6 +9,7 @@ import random
 
 from generative_agent import GenerativeAgent
 from generative_agent_memory import GenerativeAgentMemory
+from generative_agent_context import GenerativeAgentContext
 
 from typing import Optional
 
@@ -24,7 +25,7 @@ from langchain.chat_models import ChatOpenAI
 from langchain.docstore import InMemoryDocstore
 from langchain.embeddings import OpenAIEmbeddings
 # from langchain.retrievers import TimeWeightedVectorStoreRetriever
-from langchain.vectorstores import FAISS
+from langchain.vectorstores import FAISS, milvus
 
 from vector.vector_store_retriever import TimeWeightedVectorStoreRetriever
 
@@ -42,6 +43,7 @@ Vega: My first virtual companion
 
 icon = os.path.join('img/icon.png')
 FAISS_DIR = "data/index"
+CONTEXT_DIR = "data/context"
 
 
 def get_images(pics):
@@ -119,8 +121,12 @@ class Vega(QWidget):
 
         # 先根据 id 判断当前用户的记忆是否存在
         self.user_memory_dir = os.path.join(FAISS_DIR, self.user_id)
+        self.user_context_dir = os.path.join(CONTEXT_DIR, self.user_id)
+        self.user_context_file = os.path.join(self.user_context_dir, "context.txt")
         if not os.path.exists(self.user_memory_dir):
             os.makedirs(self.user_memory_dir, exist_ok=True)
+        if not os.path.exists(self.user_context_dir):
+            os.makedirs(self.user_context_dir, exist_ok=True)
 
         if len(os.listdir(self.user_memory_dir)) == 0:
             vega_memory = GenerativeAgentMemory(
@@ -137,6 +143,9 @@ class Vega(QWidget):
                 verbose=True,
                 reflection_threshold=8
             )
+        vega_context = GenerativeAgentContext()
+        if os.path.exists(self.user_context_file):
+            vega_context.load_context_from_local(self.user_context_file)
 
         self.agent = GenerativeAgent(
             name=self.agent_name,
@@ -145,6 +154,7 @@ class Vega(QWidget):
             relation=relation,
             llm=language_model,
             memory=vega_memory,
+            context=vega_context,
             verbose=True
         )
 
@@ -200,6 +210,7 @@ class Vega(QWidget):
     def quit(self):
         # 保存记忆
         self.agent.memory.memory_retriever.save_memories_to_local(self.user_memory_dir)
+        self.agent.context.save_context_to_local(self.user_context_file)
         self.close()
         sys.exit()
 

@@ -159,6 +159,9 @@ class GenerativeAgentMemory(BaseMemory):
         return related_memories
 
     def _filter_irrelevant_memory(self, memories_str, queries: List[str]) -> str:
+        """
+        基于模型 过滤无关记忆
+        """
         prompt = PromptTemplate.from_template(
             "记忆列表："
             "{memories_str}"
@@ -180,7 +183,8 @@ class GenerativeAgentMemory(BaseMemory):
             created_time = mem.metadata["created_at"].strftime("%B %d, %Y")
             content.append(f"- {created_time}: {mem.page_content.strip()}")
         memories_str = "\n".join([f"{mem}" for mem in content[:5]])
-        return self._filter_irrelevant_memory(memories_str, queries)
+        # return self._filter_irrelevant_memory(memories_str, queries)
+        return memories_str
 
     def format_memories_simple(self, relevant_memories: List[Document]) -> str:
         return "; ".join([f"{mem.page_content}" for mem in relevant_memories])
@@ -212,7 +216,6 @@ class GenerativeAgentMemory(BaseMemory):
             relevant_memories = [
                 mem for query in queries for mem in self.fetch_memories(query)
             ]
-            # YANCY: 过滤掉无关记忆
             memory_dict[self.relevant_memories_key] = self.format_memories_detail(relevant_memories, queries)
             # memory_dict[self.relevant_memories_simple_key] = self.format_memories_simple(relevant_memories)
         return memory_dict

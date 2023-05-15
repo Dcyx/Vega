@@ -15,6 +15,8 @@ class ChatClient(QWidget):
         self.agent = parent.agent
         self.user_name = parent.user_name
         self.agent_name = parent.agent_name
+        # 添加记忆存储
+        self.user_memory_dir = parent.user_memory_dir
         self.setGeometry(parent.x() - 600, parent.y() + parent.height() - 337, 600, 337)
         self.setWindowTitle("Vega")
         self.setWindowFlags(Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶
@@ -74,7 +76,6 @@ class ChatClient(QWidget):
             self.delay_to_do(self.do_destroy)
         else:
             continue_chat, text_output = self.agent.generate_dialogue_response(f"{self.user_name} 对 {self.agent_name} 说: {msg}")
-
             self.content.append(f"{self.agent_name}: {text_output}")
             if not continue_chat:
                 self.delay_to_do(self.do_destroy)

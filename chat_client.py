@@ -1,7 +1,5 @@
 import sys
 import time
-import codecs
-import configparser
 import openai
 from PyQt5 import QtGui
 from PyQt5 import QtWidgets
@@ -12,8 +10,13 @@ from threading import Thread
 
 
 class ChatClient(QWidget):
-    def __init__(self, parent=None, **kwargs):
+    def __init__(self, parent, **kwargs):
         QtWidgets.QWidget.__init__(self)
+        self.agent = parent.agent
+        self.user_name = parent.user_name
+        self.agent_name = parent.agent_name
+        # 添加记忆存储
+        self.user_memory_dir = parent.user_memory_dir
         self.setGeometry(parent.x() - 600, parent.y() + parent.height() - 337, 600, 337)
         self.setWindowTitle("Vega")
         self.setWindowFlags(Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶
@@ -23,15 +26,6 @@ class ChatClient(QWidget):
         self.setPalette(palette)
         self.init_ui()
         self.work_thread()
-
-        config_private = 'config_private.ini'
-        self.config = configparser.ConfigParser()
-        with codecs.open(config_private, 'r', 'utf-8') as f:
-            # 读取配置文件内容
-            self.config = configparser.ConfigParser()
-            self.config.read_file(f)
-        openai.api_key = self.config.get("OpenAI", "api_key")
-        openai.api_base = self.config.get("OpenAI", "api_base")
 
     def init_ui(self):
         # 多行文本显示，显示所有的聊天信息
@@ -75,21 +69,25 @@ class ChatClient(QWidget):
     # 发送消息 + 接收消息
     def send_msg(self):
         msg = self.message.text()
-        self.content.append("Me: " + msg)
+        self.content.append(f"{self.user_name}: {msg}")
 
         if msg.upper() == "Q" or "退下吧" in msg:
-            self.content.append("Vega: 切~ 臭屁! 拜拜 👋")
-            self.timer = QTimer(self)
-            self.timer.timeout.connect(self.do_destroy)
-            self.timer.start(300)
+            self.content.append(f"{self.agent_name}: 切~ 臭屁! 拜拜 👋")
+            self.delay_to_do(self.do_destroy)
         else:
-            text_output = self.get_completion(msg)
-            self.content.append("Vega: " + text_output)
+            continue_chat, text_output = self.agent.generate_dialogue_response(f"{self.user_name} 对 {self.agent_name} 说: {msg}")
+            self.content.append(f"{self.agent_name}: {text_output}")
+            if not continue_chat:
+                self.delay_to_do(self.do_destroy)
         self.message.clear()
+
+    def delay_to_do(self, slot):
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(slot)
+        self.timer.start(1000)
 
     def do_destroy(self):
         self.timer.stop()
-        time.sleep(2)
         self.destroy()
 
     # 接收消息

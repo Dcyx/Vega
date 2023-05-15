@@ -1,11 +1,35 @@
 import os
 import sys
+import math
+import faiss
+import codecs
+import configparser
+import openai
 import random
+
+from generative_agent import GenerativeAgent
+from generative_agent_memory import GenerativeAgentMemory
+from generative_agent_context import GenerativeAgentContext
+
+from typing import Optional
+
+
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5 import QtWidgets
+
 from chat_client import ChatClient
+
+from langchain.chat_models import ChatOpenAI
+from langchain.docstore import InMemoryDocstore
+from langchain.embeddings import OpenAIEmbeddings
+# from langchain.retrievers import TimeWeightedVectorStoreRetriever
+from langchain.vectorstores import FAISS, milvus
+
+from vector.vector_store_retriever import TimeWeightedVectorStoreRetriever
+
+
 
 """
 Vega Bootstrap
@@ -18,6 +42,8 @@ Vega: My first virtual companion
 """
 
 icon = os.path.join('img/icon.png')
+FAISS_DIR = "data/index"
+CONTEXT_DIR = "data/context"
 
 
 def get_images(pics):
@@ -37,28 +63,26 @@ class Vega(QWidget):
         self.left_click = False
         self.mouse_drag_pos = None
 
-        # 托盘
+        # Tray Config
         showing = QAction("现身~", self, triggered=self.showing)
         showing.setIcon(QIcon(icon))
         quit = QAction("退出", self, triggered=self.quit)
         quit.setIcon(QIcon(icon))
-
         self.tray_icon_menu = QMenu(self)
         self.tray_icon_menu.addAction(showing)
         self.tray_icon_menu.addAction(quit)
-
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setIcon(QIcon(icon))
         self.tray_icon.setContextMenu(self.tray_icon_menu)
         self.tray_icon.show()
 
-        # 配置 Vega
-        # 活动窗口: 无边框 + 置顶 + 透明背景
+        # Vega Action Window Config
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶
         self.setAttribute(Qt.WA_TranslucentBackground)  # 半透明背景
         self.setAutoFillBackground(True)  # 非自动填充
         self.repaint()
-        #
+
+        # Load actions & resize & init position
         self.img = QLabel(self)
         self.action_dataset = []
         self.init_data()
@@ -70,6 +94,69 @@ class Vega(QWidget):
         self.timer.timeout.connect(self.run_random_actions)
         self.timer.start(500)
         self.init_position(random_pos=False)
+
+        # Load openai config
+        config_private = 'config_private.ini'
+        self.config = configparser.ConfigParser()
+        with codecs.open(config_private, 'r', 'utf-8') as f:
+            # 读取配置文件内容
+            self.config = configparser.ConfigParser()
+            self.config.read_file(f)
+        openai.api_key = self.config.get("OpenAI", "api_key")
+        openai.api_base = self.config.get("OpenAI", "api_base")
+        os.environ["OPENAI_API_KEY"] = self.config.get("OpenAI", "api_key")
+        os.environ["OPENAI_API_BASE"] = self.config.get("OpenAI", "api_base")
+
+        # TODO 用户id应该是生成的不应该是写死的，应该支持多用户
+        self.user_name = self.config.get("User", "name")
+        self.user_id = self.config.get("User", "id")
+
+        self.agent_name = self.config.get("Agent", "name")
+        self.age = self.config.get("Agent", "age")
+        traits = self.config.get("Agent", "traits")
+        relation = self.config.get("Agent", "relation")
+
+        # Init generative vector
+        language_model = ChatOpenAI(max_tokens=1500, model_name="gpt-3.5-turbo")  # Can be any LLM you want.
+
+        # 先根据 id 判断当前用户的记忆是否存在
+        self.user_memory_dir = os.path.join(FAISS_DIR, self.user_id)
+        self.user_context_dir = os.path.join(CONTEXT_DIR, self.user_id)
+        self.user_context_file = os.path.join(self.user_context_dir, "context.txt")
+        if not os.path.exists(self.user_memory_dir):
+            os.makedirs(self.user_memory_dir, exist_ok=True)
+        if not os.path.exists(self.user_context_dir):
+            os.makedirs(self.user_context_dir, exist_ok=True)
+
+        if len(os.listdir(self.user_memory_dir)) == 0:
+            vega_memory = GenerativeAgentMemory(
+                llm=language_model,
+                memory_retriever=self.create_new_memory_retriever(load_memory=False),
+                verbose=True,
+                reflection_threshold=8  # we will give this a relatively low number to show how reflection works
+            )
+        else:
+            print(f"load memory from {self.user_memory_dir}")
+            vega_memory = GenerativeAgentMemory(
+                llm=language_model,
+                memory_retriever=self.create_new_memory_retriever(load_memory=True, user_memory_dir=self.user_memory_dir),
+                verbose=True,
+                reflection_threshold=8
+            )
+        vega_context = GenerativeAgentContext()
+        if os.path.exists(self.user_context_file):
+            vega_context.load_context_from_local(self.user_context_file)
+
+        self.agent = GenerativeAgent(
+            name=self.agent_name,
+            age=self.age,
+            traits=traits,
+            relation=relation,
+            llm=language_model,
+            memory=vega_memory,
+            context=vega_context,
+            verbose=True
+        )
 
     def init_data(self):
         # singing
@@ -121,6 +208,9 @@ class Vega(QWidget):
         self.move(x, y)
 
     def quit(self):
+        # 保存记忆
+        self.agent.memory.memory_retriever.save_memories_to_local(self.user_memory_dir)
+        self.agent.context.save_context_to_local(self.user_context_file)
         self.close()
         sys.exit()
 
@@ -177,6 +267,32 @@ class Vega(QWidget):
     def on_widget2_position(self):
         widget2_pos = vega.pos()
         print(widget2_pos)
+
+
+    def relevance_score_fn(self, score: float) -> float:
+        """Return a similarity score on a scale [0, 1]."""
+        # This will differ depending on a few things:
+        # - the distance / similarity metric used by the VectorStore
+        # - the scale of your embeddings (OpenAI's are unit norm. Many others are not!)
+        # This function converts the euclidean norm of normalized embeddings
+        # (0 is most similar, sqrt(2) most dissimilar)
+        # to a similarity function (0 to 1)
+        return 1.0 - score / math.sqrt(2)
+
+    def create_new_memory_retriever(self, load_memory=False, user_memory_dir=None):
+        """Create a new vector store retriever unique to the vector."""
+        # Define your embedding model
+        embeddings_model = OpenAIEmbeddings()
+        # Initialize the vectorstore as empty
+        embedding_size = 1536
+        index = faiss.IndexFlatL2(embedding_size)
+        vectorstore = FAISS(embeddings_model.embed_query, index,
+                            InMemoryDocstore({}), {}, relevance_score_fn=self.relevance_score_fn)
+        retriever = TimeWeightedVectorStoreRetriever(vectorstore=vectorstore, other_score_keys=["importance"], k=15)
+
+        if load_memory:
+            retriever.load_memories_from_local(user_memory_dir, embeddings_model)
+        return retriever
 
 
 if __name__ == '__main__':

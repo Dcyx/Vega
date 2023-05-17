@@ -82,7 +82,7 @@ def relevance_score_fn(score: float) -> float:
     return 1.0 - score / math.sqrt(2)
 
 
-def create_new_memory_retriever(load_memory=False, user_memory_dir=None):
+def create_new_memory_retriever():
     """Create a new vector store retriever unique to the vector."""
     # Define your embedding model
     embeddings_model = OpenAIEmbeddings()
@@ -97,8 +97,6 @@ def create_new_memory_retriever(load_memory=False, user_memory_dir=None):
     vectorstore = Milvus(embeddings_model, connection_args={"host": "127.0.0.1", "port": "19530"}, relevance_score_fn=relevance_score_fn)
     retriever = TimeWeightedVectorStoreRetriever(vectorstore=vectorstore, other_score_keys=["importance"], k=15)
 
-    if load_memory:
-        retriever.load_memories_from_local(user_memory_dir, embeddings_model)
     return retriever
 
 
@@ -172,29 +170,17 @@ class Vega(QWidget):
         language_model = ChatOpenAI(max_tokens=1500, model_name="gpt-3.5-turbo")  # Can be any LLM you want.
 
         # 先根据 id 判断当前用户的记忆是否存在
-        self.user_memory_dir = os.path.join(FAISS_DIR, self.user_id)
         self.user_context_dir = os.path.join(CONTEXT_DIR, self.user_id)
         self.user_context_file = os.path.join(self.user_context_dir, "context.txt")
-        if not os.path.exists(self.user_memory_dir):
-            os.makedirs(self.user_memory_dir, exist_ok=True)
         if not os.path.exists(self.user_context_dir):
             os.makedirs(self.user_context_dir, exist_ok=True)
 
-        if len(os.listdir(self.user_memory_dir)) == 0:
-            vega_memory = GenerativeAgentMemory(
-                llm=language_model,
-                memory_retriever=create_new_memory_retriever(load_memory=False),
-                verbose=True,
-                reflection_threshold=8  # we will give this a relatively low number to show how reflection works
-            )
-        else:
-            print(f"load memory from {self.user_memory_dir}")
-            vega_memory = GenerativeAgentMemory(
-                llm=language_model,
-                memory_retriever=create_new_memory_retriever(load_memory=True, user_memory_dir=self.user_memory_dir),
-                verbose=True,
-                reflection_threshold=8
-            )
+        vega_memory = GenerativeAgentMemory(
+            llm=language_model,
+            memory_retriever=create_new_memory_retriever(),
+            verbose=True,
+            reflection_threshold=8  # we will give this a relatively low number to show how reflection works
+        )
         vega_context = GenerativeAgentContext()
         if os.path.exists(self.user_context_file):
             vega_context.load_context_from_local(self.user_context_file)
@@ -264,7 +250,6 @@ class Vega(QWidget):
 
     def quit(self):
         # 保存记忆
-        self.agent.memory.memory_retriever.save_memories_to_local(self.user_memory_dir)
         self.agent.context.save_context_to_local(self.user_context_file)
         self.close()
         sys.exit()

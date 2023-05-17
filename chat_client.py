@@ -14,7 +14,6 @@ class ChatClient(QWidget):
         self.user_name = parent.user_name
         self.agent_name = parent.agent_name
         # 添加记忆存储
-        self.user_memory_dir = parent.user_memory_dir
         self.setGeometry(parent.x() - 600, parent.y() + parent.height() - 337, 600, 337)
         self.setWindowTitle("Vega")
         self.setWindowFlags(Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶

@@ -44,7 +44,7 @@ class GenerativeAgentContext(object):
                 last_context.append(_context)
         if len(last_context) == 0:
             return "空"
-        return "\n- " + "\n- ".join(last_context)
+        return "\n- ".join(last_context)
 
     def load_context_from_local(self, file_path):
         """

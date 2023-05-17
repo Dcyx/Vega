@@ -113,27 +113,6 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
             result.append(doc)
         return result
 
-    def load_memories_from_local(
-            self, folder_path: str, embeddings: Embeddings, index_name: str = "index"
-    ):
-        """
-        从本地 fassi 加载 memory
-        TODO 定制方法，仅针对 faiss （用于加载记忆调试 memory 逻辑，后面替换成 milvus 后可删除）
-        2023/5/11 删除加载时存 memory stream 的逻辑
-        :return:
-        """
-        self.vectorstore = self.vectorstore.load_local(
-            folder_path, embeddings, index_name
-        )
-
-    def save_memories_to_local(self, folder_path: str):
-        '''
-        把记忆存在本地
-        TODO 定制方法，仅针对 faiss （用于加载记忆调试 memory 逻辑，后面替换成 milvus 后可删除）
-        :return:
-        '''
-        self.vectorstore.save_local(folder_path)
-
     async def aget_relevant_documents(self, query: str) -> List[Document]:
         """Return documents that are relevant to the query."""
         raise NotImplementedError

@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from langchain import LLMChain
@@ -180,7 +181,7 @@ class GenerativeAgentMemory(BaseMemory):
             if mem.page_content in content_strs:
                 continue
             content_strs.add(mem.page_content)
-            created_time = mem.metadata["created_at"].strftime("%B %d, %Y")
+            created_time = datetime.fromtimestamp(mem.metadata["created_at"]).strftime("%B %d, %Y")
             content.append(f"- {created_time}: {mem.page_content.strip()}")
         memories_str = "\n".join([f"{mem}" for mem in content[:5]])
         # return self._filter_irrelevant_memory(memories_str, queries)

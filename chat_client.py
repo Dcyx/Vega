@@ -70,12 +70,12 @@ class ChatClient(QWidget):
 
         if msg.upper() == "Q" or "退下吧" in msg:
             self.content.append(f"{self.agent_name}: 切~ 臭屁! 拜拜 👋")
-            self.delay_to_do(self.do_destroy)
+            self.delay_to_do(self.do_close)
         else:
             continue_chat, text_output = self.agent.generate_dialogue_response(f"{self.user_name} 对 {self.agent_name} 说: {msg}")
             self.content.append(f"{self.agent_name}: {text_output}")
             if not continue_chat:
-                self.delay_to_do(self.do_destroy)
+                self.delay_to_do(self.do_close)
         self.message.clear()
 
     def delay_to_do(self, slot):
@@ -83,9 +83,9 @@ class ChatClient(QWidget):
         self.timer.timeout.connect(slot)
         self.timer.start(1000)
 
-    def do_destroy(self):
+    def do_close(self):
         self.timer.stop()
-        self.destroy()
+        self.close()
 
     # 接收消息
     def recv_msg(self):
@@ -108,4 +108,5 @@ class ChatClient(QWidget):
         # Thread(target=self.recv_msg).start()
 
     def closeEvent(self, event):
-        self.destroy()
+        # self.destroy()
+        self.close()

@@ -1,7 +1,6 @@
 import os
 import sys
 import math
-import faiss
 import codecs
 import configparser
 import openai
@@ -17,15 +16,13 @@ from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5 import QtWidgets
 
+from vectorstores import Milvus
+from vector.vector_store_retriever import TimeWeightedVectorStoreRetriever
+
 from chat_client import ChatClient
 
 from langchain.chat_models import ChatOpenAI
-from langchain.docstore import InMemoryDocstore
 from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS, milvus
-
-from vector.vector_store_retriever import TimeWeightedVectorStoreRetriever
-
 
 
 """
@@ -90,10 +87,14 @@ def create_new_memory_retriever(load_memory=False, user_memory_dir=None):
     # Define your embedding model
     embeddings_model = OpenAIEmbeddings()
     # Initialize the vectorstore as empty
+    '''
+    change Faiss to Milvus which cause speech recognition error(torch.load(model))  
     embedding_size = 1536
     index = faiss.IndexFlatL2(embedding_size)
     vectorstore = FAISS(embeddings_model.embed_query, index,
                         InMemoryDocstore({}), {}, relevance_score_fn=relevance_score_fn)
+    '''
+    vectorstore = Milvus(embeddings_model, connection_args={"host": "127.0.0.1", "port": "19530"}, relevance_score_fn=relevance_score_fn)
     retriever = TimeWeightedVectorStoreRetriever(vectorstore=vectorstore, other_score_keys=["importance"], k=15)
 
     if load_memory:
@@ -284,11 +285,12 @@ class Vega(QWidget):
 
     # 鼠标双击事件
     def mouseDoubleClickEvent(self, event):
+        print("----Yancy----\nDoubleClick")
         # 停止长按计时
         self.long_press_timer.stop()
         # 打开聊天窗口
         self.client.show()
-        print("----Yancy----\nDoubleClick")
+
 
     # 鼠标按下后的移动事件
     def mouseMoveEvent(self, event):

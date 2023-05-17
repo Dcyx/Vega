@@ -17,9 +17,9 @@ from langchain.schema import BaseRetriever, Document
 from langchain.vectorstores.base import VectorStore
 
 
-def _get_hours_passed(time: datetime, ref_time: datetime) -> float:
+def _get_hours_passed(time: float, ref_time: float) -> float:
     """Get the hours passed between two datetime objects."""
-    return (time - ref_time).total_seconds() / 3600
+    return (time - ref_time) / 3600
 
 
 class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
@@ -67,7 +67,7 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
         根据时间间隔计算 score 衰减情况
         """
         hours_passed = _get_hours_passed(
-            current_time,
+            current_time.timestamp(),
             document.metadata["last_accessed_at"],
         )
         score = (1.0 - self.decay_rate) ** hours_passed
@@ -101,18 +101,6 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
         根据向量相似度找到最相似 k 个doc 返回
         """
         current_time = datetime.now()
-        # 1. 先从 memory stream 中找最近的 k 个消息记录，没有相关性得分
-        # docs_and_scores = {
-        #     doc.metadata["buffer_idx"]: (doc, self.default_salience)
-        #     for doc in self.memory_stream[-self.k:]
-        # }
-        # If a doc is considered salient, update the salience score
-        # 2. 更新与 query 最相似的doc
-        # 这里不仅更新从向量数据库中检索到的最相似的 doc 的 score
-        # 而且 如果之前不在 docs_and_scores 里的部分也会被增加进去
-        # docs_and_scores.update(self.get_salient_docs(query))
-
-        # 2023.5.11 更新: 只找到最相似的 document 不考虑上文的消息记录
         docs_and_scores = self.get_salient_docs(query)
         # 根据时间间隔计算相关性得分 score 的衰减情况（如果该doc 还包含 importance 得分之类的，则要加进去
         rescored_docs = [
@@ -122,12 +110,8 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
         rescored_docs.sort(key=lambda x: x[1], reverse=True)
         result = []
         # Ensure frequently accessed memories aren't forgotten
-        current_time = datetime.now()
         for doc, _ in rescored_docs[: self.k]:
-            # TODO: Update vector store doc once `update` method is exposed.
-            # 原代码逻辑：buffered_doc = self.memory_stream[doc.metadata["buffer_idx"]]
-            # 修改后：直接取
-            doc.metadata["last_accessed_at"] = current_time
+            doc.metadata["last_accessed_at"] = current_time.timestamp()
             result.append(doc)
         return result
 
@@ -167,9 +151,9 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
         # 更新记忆的访问时间
         for i, doc in enumerate(dup_docs):
             if "last_accessed_at" not in doc.metadata:
-                doc.metadata["last_accessed_at"] = current_time
+                doc.metadata["last_accessed_at"] = current_time.timestamp()
             if "created_at" not in doc.metadata:
-                doc.metadata["created_at"] = current_time
+                doc.metadata["created_at"] = current_time.timestamp()
             # 删除 buffer_idx 将来和 context 统一设置后，从上一层传进来
             # doc.metadata["buffer_idx"] = len(self.memory_stream) + i
         # 2023/5/11 解耦 memory stream
@@ -185,9 +169,7 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
         dup_docs = [deepcopy(d) for d in documents]
         for i, doc in enumerate(dup_docs):
             if "last_accessed_at" not in doc.metadata:
-                doc.metadata["last_accessed_at"] = current_time
+                doc.metadata["last_accessed_at"] = current_time.timestamp()
             if "created_at" not in doc.metadata:
-                doc.metadata["created_at"] = current_time
-        #     doc.metadata["buffer_idx"] = len(self.memory_stream) + i
-        # self.memory_stream.extend(dup_docs)
+                doc.metadata["created_at"] = current_time.timestamp()
         return await self.vectorstore.aadd_documents(dup_docs, **kwargs)

@@ -107,8 +107,8 @@ class GenerativeAgent(BaseModel):
         # TODO:  backward,forward
         prompt_obs_summary = PromptTemplate.from_template(
             "历史聊天记录:"
-            "{last_context}"
-            "最新输入:"
+            "\n{last_context}"
+            "\n最新输入:"
             "\n- {time_str}\t{observation}"
             "\n基于以上对话内容,对消息中的场景、人物关系、事件等进行抽象, 总结成一句话. 不要过程,直接给结论."
             "\n\n"

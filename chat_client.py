@@ -1,5 +1,3 @@
-import sys
-import time
 import openai
 from PyQt5 import QtGui
 from PyQt5 import QtWidgets

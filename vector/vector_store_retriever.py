@@ -6,7 +6,6 @@ memory_stream 和 vectorstore 解耦
 - vectorstore 存聊天上下文 and 一些 reflection，实时写 & 实时读
 
 """
-import os
 from copy import deepcopy
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple

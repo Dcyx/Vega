@@ -6,13 +6,11 @@ import codecs
 import configparser
 import openai
 import random
+import speech_recognition as sr
 
 from generative_agent import GenerativeAgent
 from generative_agent_memory import GenerativeAgentMemory
 from generative_agent_context import GenerativeAgentContext
-
-from typing import Optional
-
 
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
@@ -24,7 +22,6 @@ from chat_client import ChatClient
 from langchain.chat_models import ChatOpenAI
 from langchain.docstore import InMemoryDocstore
 from langchain.embeddings import OpenAIEmbeddings
-# from langchain.retrievers import TimeWeightedVectorStoreRetriever
 from langchain.vectorstores import FAISS, milvus
 
 from vector.vector_store_retriever import TimeWeightedVectorStoreRetriever
@@ -53,6 +50,55 @@ def get_images(pics):
         img.load('img/'+item)
         pic_list.append(img)
     return pic_list
+
+
+def on_long_press():
+    print("----Yancy----\nSpeechRecognition")
+    #
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        recognizer.adjust_for_ambient_noise(source)
+        print(recognizer.energy_threshold)
+        print("Listening...")
+        audio = recognizer.listen(source)
+
+    try:
+        print("Processing...")
+        recognized_text = recognizer.recognize_whisper(audio, model="base")
+        print("Recognized Text:", recognized_text)
+    except sr.UnknownValueError:
+        print("Could not understand audio")
+    except sr.RequestError as e:
+        print("Error:", str(e))
+    except Exception as e:
+        print(str(e))
+
+
+def relevance_score_fn(score: float) -> float:
+    """Return a similarity score on a scale [0, 1]."""
+    # This will differ depending on a few things:
+    # - the distance / similarity metric used by the VectorStore
+    # - the scale of your embeddings (OpenAI's are unit norm. Many others are not!)
+    # This function converts the euclidean norm of normalized embeddings
+    # (0 is most similar, sqrt(2) most dissimilar)
+    # to a similarity function (0 to 1)
+    return 1.0 - score / math.sqrt(2)
+
+
+def create_new_memory_retriever(load_memory=False, user_memory_dir=None):
+    """Create a new vector store retriever unique to the vector."""
+    # Define your embedding model
+    embeddings_model = OpenAIEmbeddings()
+    # Initialize the vectorstore as empty
+    embedding_size = 1536
+    index = faiss.IndexFlatL2(embedding_size)
+    vectorstore = FAISS(embeddings_model.embed_query, index,
+                        InMemoryDocstore({}), {}, relevance_score_fn=relevance_score_fn)
+    retriever = TimeWeightedVectorStoreRetriever(vectorstore=vectorstore, other_score_keys=["importance"], k=15)
+
+    if load_memory:
+        retriever.load_memories_from_local(user_memory_dir, embeddings_model)
+    return retriever
 
 
 class Vega(QWidget):
@@ -85,15 +131,20 @@ class Vega(QWidget):
         # Load actions & resize & init position
         self.img = QLabel(self)
         self.action_dataset = []
-        self.init_data()
+        self.load_agent_imgs()
         self.set_pic("vega1.png")
         self.resize(128, 128)
         self.show()
         self.runing = False
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.run_random_actions)
-        self.timer.start(500)
+        self.random_action_timer = QTimer()
+        self.random_action_timer.timeout.connect(self.run_random_actions)
+        self.random_action_timer.start(500)
         self.init_position(random_pos=False)
+
+        # Long press event, start a speech recognition listener
+        self.long_press_timer = QTimer(self)
+        self.long_press_timer.timeout.connect(on_long_press)
+        self.long_press_timer.setSingleShot(True)
 
         # Load openai config
         config_private = 'config_private.ini'
@@ -131,7 +182,7 @@ class Vega(QWidget):
         if len(os.listdir(self.user_memory_dir)) == 0:
             vega_memory = GenerativeAgentMemory(
                 llm=language_model,
-                memory_retriever=self.create_new_memory_retriever(load_memory=False),
+                memory_retriever=create_new_memory_retriever(load_memory=False),
                 verbose=True,
                 reflection_threshold=8  # we will give this a relatively low number to show how reflection works
             )
@@ -139,7 +190,7 @@ class Vega(QWidget):
             print(f"load memory from {self.user_memory_dir}")
             vega_memory = GenerativeAgentMemory(
                 llm=language_model,
-                memory_retriever=self.create_new_memory_retriever(load_memory=True, user_memory_dir=self.user_memory_dir),
+                memory_retriever=create_new_memory_retriever(load_memory=True, user_memory_dir=self.user_memory_dir),
                 verbose=True,
                 reflection_threshold=8
             )
@@ -158,7 +209,10 @@ class Vega(QWidget):
             verbose=True
         )
 
-    def init_data(self):
+        # 最后初始化聊天面板: client 中引用了 self.agent
+        self.client = ChatClient(parent=self)
+
+    def load_agent_imgs(self):
         # singing
         imgs = get_images(["vega1.png", "vega1b.png", "vega2.png", "vega2b.png", "vega3.png", "vega3b.png"])
         self.action_dataset.append(imgs)
@@ -218,81 +272,64 @@ class Vega(QWidget):
     def showing(self):
         self.setWindowOpacity(1)
 
-    # 鼠标左键按下时, 宠物将和鼠标位置绑定
+    # 鼠标按下事件 不分左右, 将和鼠标位置绑定
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.left_click = True
-        self.mouse_drag_pos = event.globalPos() - self.pos()
+            self.mouse_drag_pos = event.globalPos() - self.pos()  # 鼠标点击位置 - agent 位置
+            self.setCursor(QCursor(Qt.ClosedHandCursor))
+            print("----Yancy----\nPress")
+            self.long_press_timer.start(300)
         event.accept()
-        # 拖动时鼠标图形的设置
-        self.setCursor(QCursor(Qt.OpenHandCursor))
 
-    # 鼠标移动时调用，实现宠物随鼠标移动
+    # 鼠标双击事件
+    def mouseDoubleClickEvent(self, event):
+        # 停止长按计时
+        self.long_press_timer.stop()
+        # 打开聊天窗口
+        self.client.show()
+        print("----Yancy----\nDoubleClick")
+
+    # 鼠标按下后的移动事件
     def mouseMoveEvent(self, event):
         # 如果鼠标左键按下，且处于绑定状态
-        if Qt.LeftButton and self.left_click:
+        if self.left_click and (event.globalPos() - self.mouse_drag_pos - self.pos()).x() != 0:
             # 宠物随鼠标进行移动
             self.move(event.globalPos() - self.mouse_drag_pos)
-        event.accept()
+            print("----Yancy----\nMove")
+            # 明显出现位移后再停止长按计时
+            self.long_press_timer.stop()
+            event.accept()
 
-    # 鼠标释放调用，取消绑定
+    # 鼠标释放调用
     def mouseReleaseEvent(self, event):
+        # 恢复初始状态
         self.left_click = False
-        # 鼠标图形设置为箭头
         self.setCursor(QCursor(Qt.ArrowCursor))
+        print("----Yancy----\nRelease")
+        # 停止长按计时
+        self.long_press_timer.stop()
 
-    def enterEvent(self, event):
-        self.setCursor(Qt.ClosedHandCursor)  # 设置鼠标形状 Qt.ClosedHandCursor 非指向手
-
-    # 右键点击交互
+    # 右键菜单事件
     def contextMenuEvent(self, event):
-        # 定义菜单
+        # 停止长按计时
+        self.long_press_timer.stop()
+        # 配置右键菜单
         menu = QMenu(self)
-        # 定义菜单项
-        question_answer = menu.addAction("聊聊?")
+        chat_with_me = menu.addAction("聊聊?")
         hide = menu.addAction("退下吧~")
         menu.addSeparator()
-
         # 使用exec_()方法显示菜单。从鼠标右键事件对象中获得当前坐标。mapToGlobal()方法把当前组件的相对坐标转换为窗口（window）的绝对坐标。
         action = menu.exec_(self.mapToGlobal(event.pos()))
-        # if action == quitAction:
-        #     qApp.quit()
         if action == hide:
             self.setWindowOpacity(0)
-        if action == question_answer:
-            self.client = ChatClient(parent=self)
+        if action == chat_with_me:
             self.client.show()
 
-    #
-    def on_widget2_position(self):
-        widget2_pos = vega.pos()
-        print(widget2_pos)
-
-
-    def relevance_score_fn(self, score: float) -> float:
-        """Return a similarity score on a scale [0, 1]."""
-        # This will differ depending on a few things:
-        # - the distance / similarity metric used by the VectorStore
-        # - the scale of your embeddings (OpenAI's are unit norm. Many others are not!)
-        # This function converts the euclidean norm of normalized embeddings
-        # (0 is most similar, sqrt(2) most dissimilar)
-        # to a similarity function (0 to 1)
-        return 1.0 - score / math.sqrt(2)
-
-    def create_new_memory_retriever(self, load_memory=False, user_memory_dir=None):
-        """Create a new vector store retriever unique to the vector."""
-        # Define your embedding model
-        embeddings_model = OpenAIEmbeddings()
-        # Initialize the vectorstore as empty
-        embedding_size = 1536
-        index = faiss.IndexFlatL2(embedding_size)
-        vectorstore = FAISS(embeddings_model.embed_query, index,
-                            InMemoryDocstore({}), {}, relevance_score_fn=self.relevance_score_fn)
-        retriever = TimeWeightedVectorStoreRetriever(vectorstore=vectorstore, other_score_keys=["importance"], k=15)
-
-        if load_memory:
-            retriever.load_memories_from_local(user_memory_dir, embeddings_model)
-        return retriever
+    # 选中的前提下, 鼠标进入事件
+    def enterEvent(self, event):
+        self.setCursor(Qt.OpenHandCursor)  # 设置鼠标形状 Qt.ClosedHandCursor 非指向手
+        print("----Yancy----\nEnter")
 
 
 if __name__ == '__main__':

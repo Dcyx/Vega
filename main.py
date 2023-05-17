@@ -50,8 +50,6 @@ def get_images(pics):
 
 
 def on_long_press():
-    print("----Yancy----\nSpeechRecognition")
-    #
     recognizer = sr.Recognizer()
     with sr.Microphone() as source:
         recognizer.adjust_for_ambient_noise(source)
@@ -264,26 +262,24 @@ class Vega(QWidget):
             self.left_click = True
             self.mouse_drag_pos = event.globalPos() - self.pos()  # 鼠标点击位置 - agent 位置
             self.setCursor(QCursor(Qt.ClosedHandCursor))
-            print("----Yancy----\nPress")
             self.long_press_timer.start(300)
         event.accept()
 
     # 鼠标双击事件
     def mouseDoubleClickEvent(self, event):
-        print("----Yancy----\nDoubleClick")
         # 停止长按计时
         self.long_press_timer.stop()
         # 打开聊天窗口
         self.client.show()
 
-
     # 鼠标按下后的移动事件
     def mouseMoveEvent(self, event):
         # 如果鼠标左键按下，且处于绑定状态
         if self.left_click and (event.globalPos() - self.mouse_drag_pos - self.pos()).x() != 0:
-            # 宠物随鼠标进行移动
+            #
+            self.setCursor(Qt.ClosedHandCursor)
+            # 随鼠标进行移动
             self.move(event.globalPos() - self.mouse_drag_pos)
-            print("----Yancy----\nMove")
             # 明显出现位移后再停止长按计时
             self.long_press_timer.stop()
             event.accept()
@@ -293,7 +289,6 @@ class Vega(QWidget):
         # 恢复初始状态
         self.left_click = False
         self.setCursor(QCursor(Qt.ArrowCursor))
-        print("----Yancy----\nRelease")
         # 停止长按计时
         self.long_press_timer.stop()
 
@@ -316,7 +311,6 @@ class Vega(QWidget):
     # 选中的前提下, 鼠标进入事件
     def enterEvent(self, event):
         self.setCursor(Qt.OpenHandCursor)  # 设置鼠标形状 Qt.ClosedHandCursor 非指向手
-        print("----Yancy----\nEnter")
 
 
 if __name__ == '__main__':

@@ -40,16 +40,8 @@ class ChatWindowBubbleLeft(QWidget):
         self.repaint()
         self.resize(256, 128)
 
-        #
-        self.effect = QGraphicsOpacityEffect()
-
         # Window Label
         self.bubble = QLabel(self)
-        self.bubble.resize(256, 128)
-        self.bubble.setScaledContents(True)
-        self.bubble.setAlignment(Qt.AlignCenter)
-        self.bubble.setStyleSheet("border-image:url(img/chat_bb_l_640_548.png);")
-        self.bubble.setGraphicsEffect(self.effect)
 
         # auto-fade
         self.fade_out_timer = QTimer(self)
@@ -57,10 +49,14 @@ class ChatWindowBubbleLeft(QWidget):
         self.fade_out_timer.setSingleShot(True)
 
         #
-        self.animation = QPropertyAnimation(self.effect, b"opacity")
+        self.animation = QPropertyAnimation(self.bubble, b"geometry")  # target, param, param 必须加 b
 
     def showMessage(self, message):
         self.animation.stop()
+        self.bubble.resize(256, 128)
+        self.bubble.setScaledContents(True)
+        self.bubble.setAlignment(Qt.AlignCenter)
+        self.bubble.setStyleSheet("border-image:url(img/chat_bb_l_640_548.png);")
         self.bubble.setText(message * 10)
         self.bubble.setWordWrap(True)
         self.move(self.parent.x() - self.bubble.width(), self.parent.y() - self.bubble.height())
@@ -72,27 +68,20 @@ class ChatWindowBubbleLeft(QWidget):
         self.close()
 
     def fade(self):
-        self.animation.setDuration(1000)
-        self.animation.setStartValue(1)
-        self.animation.setEndValue(0)
+        self.animation.setDuration(3000)
+        self.animation.setEndValue(QRect(0, 0, 0, 0))
+        self.animation.setEasingCurve(QEasingCurve.InOutQuad)
+        self.animation.valueChanged.connect(self.on_value_changed)
+        self.animation.finished.connect(self.on_finished)
         self.animation.start()
 
-    def start_animation(self):
-        # 获取窗口的当前位置和大小
-        geometry = self.bubble.geometry()
+    def on_value_changed(self):
+        # 根据动画进程的百分比，设置label的透明度
+        opacity = 1.0 - self.animation.currentLoopTime() / self.animation.totalDuration()
+        self.bubble.setWindowOpacity(opacity)
 
-        # 新建一个动画
-        animation = QPropertyAnimation(self.bubble, b'geometry')
-
-        # 设置动画持续时间
-        animation.setDuration(3000)
-
-        # 设置动画结束位置和开始位置
-        animation.setEndValue(QRect(geometry.x(), geometry.y() - 200, 0, 0))
-        animation.setStartValue(geometry)
-
-        # 启动动画
-        animation.start()
+    def on_finished(self):
+        self.close()
 
 
 class ChatWindowNormal(QWidget):

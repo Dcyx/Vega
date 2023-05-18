@@ -38,10 +38,13 @@ class ChatWindowBubbleLeft(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)  # 半透明背景
         self.setAutoFillBackground(True)  # 非自动填充
         self.repaint()
-        self.resize(256, 128)
 
         # Window Label
         self.bubble = QLabel(self)
+        self.bubble.setScaledContents(True)
+        self.bubble.setAlignment(Qt.AlignCenter)
+        self.bubble.setStyleSheet("border-image:url(img/chat_bb_l_640_548.png);")
+        self.bubble.setWordWrap(True)
 
         # auto-fade
         self.fade_out_timer = QTimer(self)
@@ -49,17 +52,14 @@ class ChatWindowBubbleLeft(QWidget):
         self.fade_out_timer.setSingleShot(True)
 
         #
-        self.animation = QPropertyAnimation(self.bubble, b"geometry")  # target, param, param 必须加 b
+        self.animation = QPropertyAnimation(self, b"geometry")  # target, param, param 必须加 b
 
     def showMessage(self, message):
         self.animation.stop()
+        self.resize(256, 128)
         self.bubble.resize(256, 128)
-        self.bubble.setScaledContents(True)
-        self.bubble.setAlignment(Qt.AlignCenter)
-        self.bubble.setStyleSheet("border-image:url(img/chat_bb_l_640_548.png);")
-        self.bubble.setText(message * 10)
-        self.bubble.setWordWrap(True)
         self.move(self.parent.x() - self.bubble.width(), self.parent.y() - self.bubble.height())
+        self.bubble.setText(message * 10)
         self.show()
         # 1s 后自动消失
         self.fade_out_timer.start(1500)
@@ -69,7 +69,7 @@ class ChatWindowBubbleLeft(QWidget):
 
     def fade(self):
         self.animation.setDuration(3000)
-        self.animation.setEndValue(QRect(0, 0, 0, 0))
+        self.animation.setEndValue(QRect(self.x() + self.width() * 0.5, self.y() - self.height() * 2, 0, 0))
         self.animation.setEasingCurve(QEasingCurve.InOutQuad)
         self.animation.valueChanged.connect(self.on_value_changed)
         self.animation.finished.connect(self.on_finished)
@@ -78,7 +78,7 @@ class ChatWindowBubbleLeft(QWidget):
     def on_value_changed(self):
         # 根据动画进程的百分比，设置label的透明度
         opacity = 1.0 - self.animation.currentLoopTime() / self.animation.totalDuration()
-        self.bubble.setWindowOpacity(opacity)
+        self.bubble.resize(self.width(), self.height())
 
     def on_finished(self):
         self.close()

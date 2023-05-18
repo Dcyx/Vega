@@ -1,13 +1,101 @@
 import openai
 from PyQt5 import QtGui
-from PyQt5 import QtWidgets
-from PyQt5.QtGui import QFont
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
+from PyQt5 import QtWidgets
 from threading import Thread
 
 
-class ChatClient(QWidget):
+class ChatWindowBubbleRight(QWidget):
+    def __init__(self, parent, **kwargs):
+        QtWidgets.QWidget.__init__(self)
+        # Window Config
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶
+        self.setAttribute(Qt.WA_TranslucentBackground)  # 半透明背景
+        self.setAutoFillBackground(True)  # 非自动填充
+        self.repaint()
+
+        # Window UI
+        self.img = QLabel(self)
+        self.set_pic("chat_bubble_right.png")
+        self.resize(512, 512)
+
+    def set_pic(self, pic):
+        img = QImage()
+        img.load('img/'+pic)
+        self.img.setPixmap(QPixmap.fromImage(img))
+
+
+class ChatWindowBubbleLeft(QWidget):
+    def __init__(self, parent, **kwargs):
+        # 默认宽度 640, 高度 480
+        QtWidgets.QWidget.__init__(self)
+        self.parent = parent
+
+        # Window Config: Transparent
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶
+        self.setAttribute(Qt.WA_TranslucentBackground)  # 半透明背景
+        self.setAutoFillBackground(True)  # 非自动填充
+        self.repaint()
+        self.resize(256, 128)
+
+        #
+        self.effect = QGraphicsOpacityEffect()
+
+        # Window Label
+        self.bubble = QLabel(self)
+        self.bubble.resize(256, 128)
+        self.bubble.setScaledContents(True)
+        self.bubble.setAlignment(Qt.AlignCenter)
+        self.bubble.setStyleSheet("border-image:url(img/chat_bb_l_640_548.png);")
+        self.bubble.setGraphicsEffect(self.effect)
+
+        # auto-fade
+        self.fade_out_timer = QTimer(self)
+        self.fade_out_timer.timeout.connect(self.fade)
+        self.fade_out_timer.setSingleShot(True)
+
+        #
+        self.animation = QPropertyAnimation(self.effect, b"opacity")
+
+    def showMessage(self, message):
+        self.animation.stop()
+        self.bubble.setText(message * 10)
+        self.bubble.setWordWrap(True)
+        self.move(self.parent.x() - self.bubble.width(), self.parent.y() - self.bubble.height())
+        self.show()
+        # 1s 后自动消失
+        self.fade_out_timer.start(1500)
+
+    def mousePressEvent(self, event):
+        self.close()
+
+    def fade(self):
+        self.animation.setDuration(1000)
+        self.animation.setStartValue(1)
+        self.animation.setEndValue(0)
+        self.animation.start()
+
+    def start_animation(self):
+        # 获取窗口的当前位置和大小
+        geometry = self.bubble.geometry()
+
+        # 新建一个动画
+        animation = QPropertyAnimation(self.bubble, b'geometry')
+
+        # 设置动画持续时间
+        animation.setDuration(3000)
+
+        # 设置动画结束位置和开始位置
+        animation.setEndValue(QRect(geometry.x(), geometry.y() - 200, 0, 0))
+        animation.setStartValue(geometry)
+
+        # 启动动画
+        animation.start()
+
+
+class ChatWindowNormal(QWidget):
     def __init__(self, parent, **kwargs):
         QtWidgets.QWidget.__init__(self)
         self.agent = parent.agent
@@ -38,30 +126,6 @@ class ChatClient(QWidget):
         self.button = QPushButton("发送", self)
         self.button.setFont(QFont("微软雅黑", 10, QFont.Bold))
         self.button.setGeometry(520, 270, 60, 30)
-
-    def get_completion(self, prompt):
-        """
-
-        """
-        messages = [
-            {"role": "system", "content": "接下来你要以 vega 的身份跟我说话，你的名字叫 vega，灵感来源于天琴座中最明亮的星星 织女一，"
-                                          "同时织女也是中国古代爱情故事牛郎与织女中的角色。你的性格是非常活泼，幽默的。你作为我的朋友，"
-                                          "会尽量满足我的要求，同时，我们是非常亲近的朋友，你有什么话都可以直说。不要用敬语，语气口吻越随便越好。"
-                                          "接下来你只需要以我的朋友 vega 这个身份与我交流。"},
-            {"role": "user", "content": prompt}
-        ]
-        try:
-            completion = openai.ChatCompletion.create(
-                model='gpt-3.5-turbo',
-                messages=messages
-            )
-        except Exception as e:
-            print(e)
-            return "出错啦~"
-        if 'choices' not in completion:
-            print(completion)
-            return "出错啦~"
-        return completion.choices[0].message.content
 
     # 发送消息 + 接收消息
     def send_msg(self):

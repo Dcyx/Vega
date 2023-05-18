@@ -19,7 +19,9 @@ from PyQt5 import QtWidgets
 from vectorstores import Milvus
 from vector.vector_store_retriever import TimeWeightedVectorStoreRetriever
 
-from chat_client import ChatClient
+from chat_client import ChatWindowNormal
+from chat_client import ChatWindowBubbleLeft
+from chat_client import ChatWindowBubbleRight
 
 from langchain.chat_models import ChatOpenAI
 from langchain.embeddings import OpenAIEmbeddings
@@ -47,26 +49,6 @@ def get_images(pics):
         img.load('img/'+item)
         pic_list.append(img)
     return pic_list
-
-
-def on_long_press():
-    recognizer = sr.Recognizer()
-    with sr.Microphone() as source:
-        recognizer.adjust_for_ambient_noise(source)
-        print(recognizer.energy_threshold)
-        print("Listening...")
-        audio = recognizer.listen(source)
-
-    try:
-        print("Processing...")
-        recognized_text = recognizer.recognize_whisper(audio, model="base")
-        print("Recognized Text:", recognized_text)
-    except sr.UnknownValueError:
-        print("Could not understand audio")
-    except sr.RequestError as e:
-        print("Error:", str(e))
-    except Exception as e:
-        print(str(e))
 
 
 def relevance_score_fn(score: float) -> float:
@@ -140,7 +122,7 @@ class Vega(QWidget):
 
         # Long press event, start a speech recognition listener
         self.long_press_timer = QTimer(self)
-        self.long_press_timer.timeout.connect(on_long_press)
+        self.long_press_timer.timeout.connect(self.on_long_press)
         self.long_press_timer.setSingleShot(True)
 
         # Load openai config
@@ -195,7 +177,9 @@ class Vega(QWidget):
         )
 
         # 最后初始化聊天面板: client 中引用了 self.agent
-        self.client = ChatClient(parent=self)
+        self.chat_window_norm = ChatWindowNormal(parent=self)
+        self.chat_bubble_left = ChatWindowBubbleLeft(parent=self)
+        self.chat_bubble_right = ChatWindowBubbleRight(parent=self)
 
     def load_agent_imgs(self):
         # singing
@@ -246,6 +230,31 @@ class Vega(QWidget):
         y = (screen.height() - self.geometry().height()) * (random.random() if random_pos else 1)
         self.move(x, y)
 
+    def on_long_press(self):
+        """
+        长按事件, 触发语音聊天
+        :return:
+        """
+        self.chat_bubble_left.showMessage("recognized_text")
+        return
+        recognizer = sr.Recognizer()
+        with sr.Microphone() as source:
+            recognizer.adjust_for_ambient_noise(source)
+            print(recognizer.energy_threshold)
+            print("Listening...")
+            audio = recognizer.listen(source)
+            # recognizer.snowboy_wait_for_hot_word()
+        try:
+            print("Processing...")
+            recognized_text = recognizer.recognize_whisper(audio, model="base")
+            print("Recognized Text:", recognized_text)
+        except sr.UnknownValueError:
+            print("Could not understand audio")
+        except sr.RequestError as e:
+            print("Error:", str(e))
+        except Exception as e:
+            print(str(e))
+
     def quit(self):
         # 保存记忆
         self.agent.context.save_context_to_local(self.user_context_file)
@@ -270,7 +279,7 @@ class Vega(QWidget):
         # 停止长按计时
         self.long_press_timer.stop()
         # 打开聊天窗口
-        self.client.show()
+        self.chat_window_norm.show()
 
     # 鼠标按下后的移动事件
     def mouseMoveEvent(self, event):
@@ -306,7 +315,7 @@ class Vega(QWidget):
         if action == hide:
             self.setWindowOpacity(0)
         if action == chat_with_me:
-            self.client.show()
+            self.chat_window_norm.show()
 
     # 选中的前提下, 鼠标进入事件
     def enterEvent(self, event):

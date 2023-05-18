@@ -235,19 +235,27 @@ class Vega(QWidget):
         长按事件, 触发语音聊天
         :return:
         """
-        self.chat_bubble_left.showMessage("recognized_text")
+        '''
+          1.bubble.setText(message) 不会触发 wrap. 必须转成富文本才能自动换行.
+          2.文本碰到 bubble window 边界才会换行, 但图片范围小于 window 边界, 需配置文本 margin
+        '''
+        chat_bubble_left = ChatWindowBubbleLeft(parent=self)
+        chat_bubble_left.showMessage(message='<p>' + "这是一条用于测试的消息" + "</p>")
         return
         recognizer = sr.Recognizer()
         with sr.Microphone() as source:
             recognizer.adjust_for_ambient_noise(source)
             print(recognizer.energy_threshold)
-            print("Listening...")
+            # 初始化
+            chat_bubble_left_init = ChatWindowBubbleLeft(parent=self)
+            chat_bubble_left_init.showMessage('<p>' + "嗯? 我在听, 你说吧~" + "</p>")
             audio = recognizer.listen(source)
-            # recognizer.snowboy_wait_for_hot_word()
         try:
-            print("Processing...")
+            chat_bubble_left_process = ChatWindowBubbleLeft(parent=self)
+            chat_bubble_left_process.showMessage('<p>' + "嗯. 我想一下~" + "</p>")
             recognized_text = recognizer.recognize_whisper(audio, model="base")
-            print("Recognized Text:", recognized_text)
+            chat_bubble_left_recall = ChatWindowBubbleLeft(parent=self)
+            chat_bubble_left_recall.showMessage('<p>' + '你说的是: "' + recognized_text + '"吗?</p>')
         except sr.UnknownValueError:
             print("Could not understand audio")
         except sr.RequestError as e:

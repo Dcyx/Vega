@@ -54,18 +54,19 @@ class ChatWindowBubbleLeft(QWidget):
         #
         self.animation = QPropertyAnimation(self, b"geometry")  # target, param, param 必须加 b
 
-    def showMessage(self, message):
+    def showMessage(self, message: str):
         self.animation.stop()
         self.resize(256, 128)
         self.bubble.resize(256, 128)
+        self.bubble.setText(message)
         self.move(self.parent.x() - self.bubble.width(), self.parent.y() - self.bubble.height())
-        self.bubble.setText(message * 10)
         self.show()
         # 1s 后自动消失
-        self.fade_out_timer.start(1500)
+        self.fade_out_timer.start(3000)
 
     def mousePressEvent(self, event):
-        self.close()
+        # self.close()
+        pass
 
     def fade(self):
         self.animation.setDuration(3000)
@@ -81,7 +82,7 @@ class ChatWindowBubbleLeft(QWidget):
         self.bubble.resize(self.width(), self.height())
 
     def on_finished(self):
-        self.close()
+        self.destroy()
 
 
 class ChatWindowNormal(QWidget):

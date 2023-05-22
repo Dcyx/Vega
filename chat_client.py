@@ -1,3 +1,5 @@
+import time
+
 import openai
 from PyQt5 import QtGui
 from PyQt5.QtGui import *
@@ -7,37 +9,132 @@ from PyQt5 import QtWidgets
 from threading import Thread
 
 
-class ChatWindowBubbleRight(QWidget):
-    def __init__(self, parent, **kwargs):
-        QtWidgets.QWidget.__init__(self)
-        # Window Config
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶
-        self.setAttribute(Qt.WA_TranslucentBackground)  # 半透明背景
-        self.setAutoFillBackground(True)  # 非自动填充
-        self.repaint()
-
-        # Window UI
-        self.img = QLabel(self)
-        self.set_pic("chat_bubble_right.png")
-        self.resize(512, 512)
-
-    def set_pic(self, pic):
-        img = QImage()
-        img.load('img/'+pic)
-        self.img.setPixmap(QPixmap.fromImage(img))
-
-
-class ChatWindowBubbleLeft(QWidget):
-    def __init__(self, parent, **kwargs):
-        # 默认宽度 640, 高度 480
-        QtWidgets.QWidget.__init__(self)
-        self.parent = parent
-
+class WindowBubble(QWidget):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         # Window Config: Transparent
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶
         self.setAttribute(Qt.WA_TranslucentBackground)  # 半透明背景
         self.setAutoFillBackground(True)  # 非自动填充
         self.repaint()
+
+
+class ThoughtWindowBubble(WindowBubble):
+    def __init__(self, px, py, **kwargs):
+        super().__init__(**kwargs)
+
+        # 默认宽度 640, 高度 480
+        self.px = px
+        self.py = py
+
+        # Window Label
+        self.bubble = QLabel(self)
+        self.bubble.setScaledContents(True)
+        self.bubble.setAlignment(Qt.AlignCenter)
+        self.bubble.setStyleSheet("border-image:url(img/think_cartoon_cloud.png);padding:8px;")
+        self.bubble.setWordWrap(True)
+
+        # auto-fade
+        self.fade_out_timer = QTimer(self)
+        self.fade_out_timer.timeout.connect(self.fade)
+        self.fade_out_timer.setSingleShot(True)
+
+        #
+        self.animation = QPropertyAnimation(self, b"geometry")  # target, param, param 必须加 b
+
+    #
+    def show_message(self, message: str):
+        self.animation.stop()
+        self.resize(256, 128)
+        self.bubble.resize(256, 128)
+        self.bubble.setText(message)
+        self.move(self.px - self.bubble.width(), self.py - self.bubble.height())
+        self.show()
+        self.fade_out_timer.start(1500)
+        print("show:" + time.strftime('%Y/%m/%d %H:%M:%S', time.localtime(time.time())))
+
+    def mousePressEvent(self, event):
+        # self.close()
+        pass
+
+    def fade(self):
+        self.animation.setDuration(6000)
+        self.animation.setEndValue(QRect(self.x() + self.width() * 0.5, self.y() - self.height() * 3, 0, 0))
+        self.animation.setEasingCurve(QEasingCurve.InOutQuad)
+        self.animation.valueChanged.connect(self.on_value_changed)
+        self.animation.finished.connect(self.on_finished)
+        self.animation.start()
+
+    def on_value_changed(self):
+        # 根据动画进程的百分比，设置label的透明度
+        opacity = 1.0 - self.animation.currentLoopTime() / self.animation.totalDuration()
+        self.bubble.resize(self.width(), self.height())
+
+    def on_finished(self):
+        self.destroy()
+
+
+class ChatWindowBubbleRight(WindowBubble):
+    def __init__(self, px, py, **kwargs):
+        super().__init__(**kwargs)
+
+        # 默认宽度 640, 高度 480
+        self.px = px
+        self.py = py
+
+        # Window Label
+        self.bubble = QLabel(self)
+        self.bubble.setScaledContents(True)
+        self.bubble.setAlignment(Qt.AlignCenter)
+        self.bubble.setStyleSheet("border-image:url(img/chat_bb_r_640_548.png);")
+        self.bubble.setWordWrap(True)
+
+        # auto-fade
+        self.fade_out_timer = QTimer(self)
+        self.fade_out_timer.timeout.connect(self.fade)
+        self.fade_out_timer.setSingleShot(True)
+
+        #
+        self.animation = QPropertyAnimation(self, b"geometry")  # target, param, param 必须加 b
+
+    def show_message(self, message: str):
+        self.animation.stop()
+        self.resize(256, 128)
+        self.bubble.resize(256, 128)
+        self.bubble.setText(message)
+        self.move(self.px - self.bubble.width(), self.py - self.bubble.height())
+        self.show()
+        self.fade_out_timer.start(1500)
+        print("show:" + time.strftime('%Y/%m/%d %H:%M:%S', time.localtime(time.time())))
+
+    def mousePressEvent(self, event):
+        # self.close()
+        pass
+
+    def fade(self):
+        self.animation.setDuration(6000)
+        self.animation.setEndValue(QRect(self.x() + self.width() * 0.5, self.y() - self.height() * 2, 0, 0))
+        self.animation.setEasingCurve(QEasingCurve.InOutQuad)
+        self.animation.valueChanged.connect(self.on_value_changed)
+        self.animation.finished.connect(self.on_finished)
+        self.animation.start()
+
+    def on_value_changed(self):
+        # 根据动画进程的百分比，设置label的透明度
+        opacity = 1.0 - self.animation.currentLoopTime() / self.animation.totalDuration()
+        self.bubble.resize(self.width(), self.height())
+
+    def on_finished(self):
+        self.destroy()
+
+
+class ChatWindowBubbleLeft(WindowBubble):
+    def __init__(self, px, py, **kwargs):
+        super().__init__(**kwargs)
+
+        # 默认宽度 640, 高度 480
+        self.px = px
+        self.py = py
 
         # Window Label
         self.bubble = QLabel(self)
@@ -54,22 +151,22 @@ class ChatWindowBubbleLeft(QWidget):
         #
         self.animation = QPropertyAnimation(self, b"geometry")  # target, param, param 必须加 b
 
-    def showMessage(self, message: str):
+    def show_message(self, message: str):
         self.animation.stop()
         self.resize(256, 128)
         self.bubble.resize(256, 128)
         self.bubble.setText(message)
-        self.move(self.parent.x() - self.bubble.width(), self.parent.y() - self.bubble.height())
+        self.move(self.px - self.bubble.width(), self.py - self.bubble.height())
         self.show()
-        # 1s 后自动消失
-        self.fade_out_timer.start(3000)
+        self.fade_out_timer.start(1500)
+        print("show:" + time.strftime('%Y/%m/%d %H:%M:%S', time.localtime(time.time())))
 
     def mousePressEvent(self, event):
         # self.close()
         pass
 
     def fade(self):
-        self.animation.setDuration(3000)
+        self.animation.setDuration(6000)
         self.animation.setEndValue(QRect(self.x() + self.width() * 0.5, self.y() - self.height() * 2, 0, 0))
         self.animation.setEasingCurve(QEasingCurve.InOutQuad)
         self.animation.valueChanged.connect(self.on_value_changed)
@@ -92,7 +189,6 @@ class ChatWindowNormal(QWidget):
         self.user_name = parent.user_name
         self.agent_name = parent.agent_name
         # 添加记忆存储
-        self.setGeometry(parent.x() - 600, parent.y() + parent.height() - 337, 600, 337)
         self.setWindowTitle("Vega")
         self.setWindowFlags(Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶
         palette = QtGui.QPalette()

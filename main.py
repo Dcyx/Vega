@@ -2,9 +2,14 @@ import os
 import sys
 import math
 import codecs
-import configparser
+import traceback
+import threading
+import time
+
 import openai
 import random
+import configparser
+import multiprocessing as mp
 import speech_recognition as sr
 
 from generative_agent import GenerativeAgent
@@ -19,9 +24,10 @@ from PyQt5 import QtWidgets
 from vectorstores import Milvus
 from vector.vector_store_retriever import TimeWeightedVectorStoreRetriever
 
-from chat_client import ChatWindowNormal
+from chat_client import ThoughtWindowBubble
 from chat_client import ChatWindowBubbleLeft
 from chat_client import ChatWindowBubbleRight
+from chat_client import ChatWindowNormal
 
 from langchain.chat_models import ChatOpenAI
 from langchain.embeddings import OpenAIEmbeddings
@@ -80,13 +86,141 @@ def create_new_memory_retriever():
     return retriever
 
 
+def listen_microphone_thread():
+    print("enter listen:" + time.strftime('%Y/%m/%d %H:%M:%S', time.localtime(time.time())))
+    recognizer = sr.Recognizer()
+    recognizer.energy_threshold = 3000
+    work_microphones = sr.Microphone.list_working_microphones()
+    key_list = list(work_microphones.keys())
+    # Yancy TODO: 校验是否有 work microphone, 要抛异常
+    with sr.Microphone(key_list[0]) as source:
+        print("----正在听")
+        print("begin listen:" + time.strftime('%Y/%m/%d %H:%M:%S', time.localtime(time.time())))
+        audio = recognizer.listen(source, timeout=15)  # Yancy: 这里要加超时, 否则由于背景噪音过大, 会一直监听
+        print("----听完啦")
+        return audio
+
+
+def recognize_audio_thread(audio):
+    try:
+        print("识别中")
+        recognizer = sr.Recognizer()
+        recognized_text = recognizer.recognize_whisper(audio, model="base", language="zh")
+        print("识别完成")
+        recognized_text = recognized_text.strip()
+        if len(recognized_text) > 0:
+            return recognized_text
+        else:
+            return "未检测到语音"
+    except sr.UnknownValueError:
+        print("Could not understand audio")
+        return "无法理解"
+    except sr.RequestError as e:
+        print("Error:", str(e))
+        return "网络异常"
+    except Exception as e:
+        print(str(e))
+        return "其他异常"
+
+
+def show_bubble_message(bubble_type, px, py, message):
+    bubble = None
+    if bubble_type == "thought":
+        bubble = ThoughtWindowBubble(px, py)
+    elif bubble_type == "chat_left":
+        bubble = ChatWindowBubbleLeft(px, py)
+    elif bubble_type == "chat_right":
+        bubble = ChatWindowBubbleRight(px, py)
+    # TODO: fix with other type exception
+    bubble.show_message(message)
+
+
+class WorkerSignals(QObject):
+    '''
+    Defines the signals available from a running worker thread.
+
+    Supported signals are:
+
+    finished
+        No data
+
+    error
+        tuple (exctype, value, traceback.format_exc() )
+
+    result
+        object data returned from processing, anything
+
+    progress
+        int indicating % progress
+
+    '''
+    finished = pyqtSignal()
+    error = pyqtSignal(tuple)
+    result = pyqtSignal(object)
+    progress = pyqtSignal(int)
+
+
+class Worker(QRunnable):
+    '''
+    Worker thread
+
+    Inherits from QRunnable to handler worker thread setup, signals and wrap-up.
+
+    :param callback: The function callback to run on this worker thread. Supplied args and
+                     kwargs will be passed through to the runner.
+    :type callback: function
+    :param args: Arguments to pass to the callback function
+    :param kwargs: Keywords to pass to the callback function
+
+    '''
+
+    def __init__(self, fn, *args, **kwargs):
+        super(Worker, self).__init__()
+
+        # Store constructor arguments (re-used for processing)
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = WorkerSignals()
+
+        # # Add the callback to our kwargs
+        # self.kwargs['progress_callback'] = self.signals.progress
+
+    @pyqtSlot()
+    def run(self):
+        """
+        Initialise the runner function with passed args, kwargs.
+        """
+
+        # Retrieve args/kwargs here; and fire processing using them
+        try:
+            result = self.fn(*self.args, **self.kwargs)
+        except:
+            traceback.print_exc()
+            exctype, value = sys.exc_info()[:2]
+            self.signals.error.emit((exctype, value, traceback.format_exc()))
+        else:
+            self.signals.result.emit(result)  # Return the result of the processing
+        finally:
+            self.signals.finished.emit()  # Done
+
+
 class Vega(QWidget):
     def __init__(self):
+        # 初始化基本属性
         QtWidgets.QWidget.__init__(self)
         self.action = None
         self.index = None
         self.left_click = False
         self.mouse_drag_pos = None
+
+        # 初始化线程池相关对象
+        self.worker_listen_result = None
+        self.worker_listen_finish = True
+        self.worker_recognize_result = None
+        self.worker_recognize_finish = True
+        self.thread_pool = QThreadPool()
+        print("Multithreading with maximum %d threads" % self.thread_pool.maxThreadCount())
 
         # Tray Config
         showing = QAction("现身~", self, triggered=self.showing)
@@ -176,10 +310,8 @@ class Vega(QWidget):
             verbose=True
         )
 
-        # 最后初始化聊天面板: client 中引用了 self.agent
+        #
         self.chat_window_norm = ChatWindowNormal(parent=self)
-        self.chat_bubble_left = ChatWindowBubbleLeft(parent=self)
-        self.chat_bubble_right = ChatWindowBubbleRight(parent=self)
 
     def load_agent_imgs(self):
         # singing
@@ -230,38 +362,69 @@ class Vega(QWidget):
         y = (screen.height() - self.geometry().height()) * (random.random() if random_pos else 1)
         self.move(x, y)
 
+    def worker_listen_result_post_process(self, result):
+        self.worker_listen_result = result
+
+    def worker_listen_status_post_process(self):
+        self.worker_listen_finish = True
+
+    def worker_recognize_result_post_process(self, result):
+        self.worker_recognize_result = result
+
+    def worker_recognize_status_post_process(self):
+        self.worker_recognize_finish = True
+
     def on_long_press(self):
+        """长按触发语音聊天
+        ʕ̡̢̡ʘ̅͟͜͡ʘ̲̅ʔ̢̡̢ ʕ•̫͡•ʕ*̫͡*ʕ•͓͡•ʔ-̫͡-ʕ•̫͡•ʔ*̫͡*ʔ-̫͡-ʔ
+
+        `GUI 优先级较低, 主线程占用会导致 GUI 卡死
+        `不可避免的阻塞逻辑中 可以通过 QApplication.processEvents() 主动调用处理事件
+        `https://www.pythonguis.com/tutorials/multithreading-pyqt-applications-qthreadpool/
         """
-        长按事件, 触发语音聊天
-        :return:
-        """
-        '''
-          1.bubble.setText(message) 不会触发 wrap. 必须转成富文本才能自动换行.
-          2.文本碰到 bubble window 边界才会换行, 但图片范围小于 window 边界, 需配置文本 margin
-        '''
-        chat_bubble_left = ChatWindowBubbleLeft(parent=self)
-        chat_bubble_left.showMessage(message='<p>' + "这是一条用于测试的消息" + "</p>")
-        return
-        recognizer = sr.Recognizer()
-        with sr.Microphone() as source:
-            recognizer.adjust_for_ambient_noise(source)
-            print(recognizer.energy_threshold)
-            # 初始化
-            chat_bubble_left_init = ChatWindowBubbleLeft(parent=self)
-            chat_bubble_left_init.showMessage('<p>' + "嗯? 我在听, 你说吧~" + "</p>")
-            audio = recognizer.listen(source)
-        try:
-            chat_bubble_left_process = ChatWindowBubbleLeft(parent=self)
-            chat_bubble_left_process.showMessage('<p>' + "嗯. 我想一下~" + "</p>")
-            recognized_text = recognizer.recognize_whisper(audio, model="base")
-            chat_bubble_left_recall = ChatWindowBubbleLeft(parent=self)
-            chat_bubble_left_recall.showMessage('<p>' + '你说的是: "' + recognized_text + '"吗?</p>')
-        except sr.UnknownValueError:
-            print("Could not understand audio")
-        except sr.RequestError as e:
-            print("Error:", str(e))
-        except Exception as e:
-            print(str(e))
+        print("进入长按事件")
+        # 启动监听
+        listen_worker = Worker(listen_microphone_thread)
+        listen_worker.signals.result.connect(self.worker_listen_result_post_process)
+        listen_worker.signals.finished.connect(self.worker_listen_status_post_process)
+        self.worker_listen_finish = False
+        self.thread_pool.start(listen_worker)
+
+        # 提示用户: 开始对话
+        print("打开 Bubble: 监听")
+        show_bubble_message("thought", self.x(), self.y(), "<p>" + "让我听听是谁在说话 (¯。¯ԅ)" + "</p>")
+
+        # 等待监听结果
+        # time.sleep(0.5)
+        while True:
+            if self.worker_listen_finish:
+                break
+            else:
+                QApplication.processEvents()
+                time.sleep(0.016)
+        print("拿到语音数据")
+        audio = self.worker_listen_result
+
+        # 启动识别
+        recognize_worker = Worker(recognize_audio_thread, audio)
+        recognize_worker.signals.result.connect(self.worker_recognize_result_post_process)
+        recognize_worker.signals.finished.connect(self.worker_recognize_status_post_process)
+        self.worker_recognize_finish = False
+        self.thread_pool.start(recognize_worker)
+
+        while True:
+            if self.worker_recognize_finish:
+                break
+            else:
+                QApplication.processEvents()
+                time.sleep(0.016)
+        print("拿到语音结果")
+        recognized_text = self.worker_recognize_result
+
+        # 提示用户: 语音识别结果
+        show_bubble_message("thought", self.x(), self.y(), "<p>" + f"{self.user_name} 说: {recognized_text}" + "</p>")
+
+        # Yancy TODO: 接入文本模型
 
     def quit(self):
         # 保存记忆
@@ -287,6 +450,7 @@ class Vega(QWidget):
         # 停止长按计时
         self.long_press_timer.stop()
         # 打开聊天窗口
+        self.chat_window_norm.setGeometry(self.x() - 600, self.y() + self.height() - 337, 600, 337)
         self.chat_window_norm.show()
 
     # 鼠标按下后的移动事件
@@ -323,6 +487,7 @@ class Vega(QWidget):
         if action == hide:
             self.setWindowOpacity(0)
         if action == chat_with_me:
+            self.chat_window_norm.setGeometry(self.x() - 600, self.y() + self.height() - 337, 600, 337)
             self.chat_window_norm.show()
 
     # 选中的前提下, 鼠标进入事件
@@ -334,4 +499,3 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     vega = Vega()
     sys.exit(app.exec_())
-

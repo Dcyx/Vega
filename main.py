@@ -141,7 +141,7 @@ class WorkerSignals(QObject):
 
     Supported signals are:
 
-    finished
+    status
         No data
 
     error
@@ -154,7 +154,7 @@ class WorkerSignals(QObject):
         int indicating % progress
 
     '''
-    finished = pyqtSignal()
+    status = pyqtSignal()
     error = pyqtSignal(tuple)
     result = pyqtSignal(object)
     progress = pyqtSignal(int)
@@ -202,7 +202,7 @@ class Worker(QRunnable):
         else:
             self.signals.result.emit(result)  # Return the result of the processing
         finally:
-            self.signals.finished.emit()  # Done
+            self.signals.status.emit()  # Done
 
 
 class Vega(QWidget):
@@ -216,9 +216,11 @@ class Vega(QWidget):
 
         # 初始化线程池相关对象
         self.worker_listen_result = None
-        self.worker_listen_finish = True
+        self.worker_listen_finished = True
         self.worker_recognize_result = None
-        self.worker_recognize_finish = True
+        self.worker_recognize_finished = True
+        self.worker_response_result = None
+        self.worker_response_finished = True
         self.thread_pool = QThreadPool()
         print("Multithreading with maximum %d threads" % self.thread_pool.maxThreadCount())
 
@@ -366,13 +368,23 @@ class Vega(QWidget):
         self.worker_listen_result = result
 
     def worker_listen_status_post_process(self):
-        self.worker_listen_finish = True
+        self.worker_listen_finished = True
 
     def worker_recognize_result_post_process(self, result):
         self.worker_recognize_result = result
 
     def worker_recognize_status_post_process(self):
-        self.worker_recognize_finish = True
+        self.worker_recognize_finished = True
+
+    def worker_response_result_post_process(self, result):
+        self.worker_response_result = result
+
+    def worker_response_status_post_process(self):
+        self.worker_response_finished = True
+
+    def response_speech_thread(self, observation):
+        continue_chat, text_output = self.agent.generate_dialogue_response(observation)
+        return text_output
 
     def on_long_press(self):
         """长按触发语音聊天
@@ -386,8 +398,8 @@ class Vega(QWidget):
         # 启动监听
         listen_worker = Worker(listen_microphone_thread)
         listen_worker.signals.result.connect(self.worker_listen_result_post_process)
-        listen_worker.signals.finished.connect(self.worker_listen_status_post_process)
-        self.worker_listen_finish = False
+        listen_worker.signals.status.connect(self.worker_listen_status_post_process)
+        self.worker_listen_finished = False
         self.thread_pool.start(listen_worker)
 
         # 提示用户: 开始对话
@@ -397,7 +409,7 @@ class Vega(QWidget):
         # 等待监听结果
         # time.sleep(0.5)
         while True:
-            if self.worker_listen_finish:
+            if self.worker_listen_finished:
                 break
             else:
                 QApplication.processEvents()
@@ -408,12 +420,12 @@ class Vega(QWidget):
         # 启动识别
         recognize_worker = Worker(recognize_audio_thread, audio)
         recognize_worker.signals.result.connect(self.worker_recognize_result_post_process)
-        recognize_worker.signals.finished.connect(self.worker_recognize_status_post_process)
-        self.worker_recognize_finish = False
+        recognize_worker.signals.status.connect(self.worker_recognize_status_post_process)
+        self.worker_recognize_finished = False
         self.thread_pool.start(recognize_worker)
 
         while True:
-            if self.worker_recognize_finish:
+            if self.worker_recognize_finished:
                 break
             else:
                 QApplication.processEvents()
@@ -424,7 +436,25 @@ class Vega(QWidget):
         # 提示用户: 语音识别结果
         show_bubble_message("thought", self.x(), self.y(), "<p>" + f"{self.user_name} 说: {recognized_text}" + "</p>")
 
-        # Yancy TODO: 接入文本模型
+        # 调用语言模型
+        response_worker = Worker(self.response_speech_thread, recognized_text)
+        response_worker.signals.result.connect(self.worker_response_result_post_process)
+        response_worker.signals.status.connect(self.worker_response_status_post_process)
+        self.worker_response_finished = False
+        self.thread_pool.start(response_worker)
+
+        # 等待语言模型返回结果
+        while True:
+            if self.worker_response_finished:
+                break
+            else:
+                QApplication.processEvents()
+                time.sleep(0.016)
+        print("拿到语言模型返回结果")
+        response_text = self.worker_response_result
+
+        show_bubble_message("chat_right", self.x(), self.y(), "<p>" + response_text + "</p>")
+
 
     def quit(self):
         # 保存记忆

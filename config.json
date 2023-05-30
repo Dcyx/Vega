@@ -1,0 +1,10 @@
+{
+  "user_name": "Your name",
+  "openai_api_key": "Your own openai api key",
+  "openai_api_base": "Your own openai api base",
+  "agents": [
+    {
+      "agent_name": "Your agent name"
+    }
+  ]
+}

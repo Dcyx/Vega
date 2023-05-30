@@ -105,7 +105,7 @@ def recognize_audio_thread(audio):
     try:
         print("识别中")
         recognizer = sr.Recognizer()
-        recognized_text = recognizer.recognize_whisper(audio, model="base", language="zh")
+        recognized_text = recognizer.recognize_whisper(audio, model="medium", language="zh")
         print("识别完成")
         recognized_text = recognized_text.strip()
         if len(recognized_text) > 0:

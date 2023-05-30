@@ -210,7 +210,7 @@ class ChatWindowNormal(QWidget):
 
         # 发送按钮
         self.button = QPushButton("发送", self)
-        self.button.setFont(QFont("微软雅黑", 10, QFont.Bold))
+        # self.button.setFont(QFont("STFangsong", 10, QFont.Bold))
         self.button.setGeometry(520, 270, 60, 30)
 
     # 发送消息 + 接收消息

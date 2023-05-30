@@ -75,11 +75,11 @@ class GenerativeAgent(BaseModel):
     def _generate_reaction(self, observation: str) -> str:
         """React to a given observation or dialogue act."""
         prompt = PromptTemplate.from_template(
-            "我的信息: {agent_description} "
+            "基础信息: {agent_description} "
             + "\n当前时间是: {current_time}."
             + "\n当前场景下对 {agent_name} 的要求包括: {agent_claim}"
-            + "\n相关记忆包括: {relevant_memories}"  # chain.run.prep_inputs 中检索 relevant_memories
-            + "\n最近的聊天记录包括：{last_context}"
+            + "\n相关记忆: {relevant_memories}"  # chain.run.prep_inputs 中检索 relevant_memories
+            + "\n聊天记录：{last_context}"
             + "\n\n回复格式: 如果回复内容中包含告别的语义, 例如 拜拜、再见、下次再聊等, 就回复 'GOODBYE:\"回复内容\"'; 如果要继续对话, 就回复 'SAY:\"回复内容\"'. "
               "不要直接将背景信息作为回复,回答的简洁一点,不要啰嗦,注意对话上下文."
             + "\n\n基于观测到的聊天信息 '{observation}', {agent_name} 会回复什么内容?"
@@ -106,11 +106,17 @@ class GenerativeAgent(BaseModel):
         """
         # TODO:  backward,forward
         prompt_obs_summary = PromptTemplate.from_template(
-            "{observation}"
+            "历史聊天记录:"
+            "\n{last_context}"
+            "\n最新输入:"
+            "\n- {time_str}\t{observation}"
             "\n基于以上对话内容,对消息中的场景、人物关系、事件等进行抽象, 总结成一句话. 不要过程,直接给结论."
             "\n\n"
         )
-        obs_summary = self.chain(prompt_obs_summary).run(observation=observation).strip()
+        current_time_str = datetime.now().strftime("%B %d, %Y, %I:%M %p")
+        obs_summary = self.chain(prompt_obs_summary).run(
+            observation=observation, last_context=self.get_context(), time_str=current_time_str
+        ).strip()
         obs_summary = re.sub(r"(\n)+", "; ", obs_summary).strip()
         print(f"----Yancy----\n{obs_summary}\n")
 
@@ -129,34 +135,6 @@ class GenerativeAgent(BaseModel):
     def _clean_response(self, text: str) -> str:
         return re.sub(f"^{self.name} ", "", text.strip()).strip()
 
-    # def generate_reaction(self, observation: str) -> Tuple[bool, str]:
-    #     """React to a given observation."""
-    #     call_to_action_template = (
-    #         "Should {agent_name} react to the observation, and if so,"
-    #         + " what would be an appropriate reaction? Respond in one line."
-    #         + ' If the action is to engage in dialogue, write:\nSAY: "what to say"'
-    #         + "\notherwise, write:\nREACT: {agent_name}'s reaction (if anything)."
-    #         + "\nEither do nothing, react, or say something but not both.\n\n"
-    #     )
-    #     full_result = self._generate_reaction(observation, call_to_action_template)
-    #     result = full_result.strip().split("\n")[0]
-    #     # AAA
-    #     self.memory.save_context(
-    #         {},
-    #         {
-    #             self.memory.add_memory_key: f"{self.name} observed "
-    #             f"{observation} and reacted by {result}"
-    #         },
-    #     )
-    #     if "REACT:" in result:
-    #         reaction = self._clean_response(result.split("REACT:")[-1])
-    #         return False, f"{self.name} {reaction}"
-    #     if "SAY:" in result:
-    #         said_value = self._clean_response(result.split("SAY:")[-1])
-    #         return True, f"{said_value}"
-    #     else:
-    #         return False, result
-
     def generate_dialogue_response(self, observation: str) -> Tuple[bool, str]:
         """React to a given observation."""
         response_raw = self._generate_reaction(observation)
@@ -164,7 +142,7 @@ class GenerativeAgent(BaseModel):
 
         if "GOODBYE:" in response:
             response_text = self._clean_response(response.split("GOODBYE:")[-1])
-            save_str = f"{self.name} 观测到 {observation} ,回复了 {response_text}"
+            save_str = f"{observation}。{self.name} 回复了 {response_text}"
             # 存 context
             self.context.add_context(save_str)
             # 存记忆
@@ -177,7 +155,7 @@ class GenerativeAgent(BaseModel):
                     f"|{self.name.upper()} ?可能会回复|{self.name.upper()} ?会回复|{self.name.upper()} ?回复道)(:|：)"
         if re.search(regex_str, response):
             response_text = self._clean_response(re.split(regex_str, response)[-1])
-            save_str = f"{self.name} 观测到 {observation}, 回复了 {response_text}"
+            save_str = f"{observation}。{self.name} 回复了 {response_text}"
             # 存 context
             self.context.add_context(save_str)
             # 存记忆
@@ -187,7 +165,7 @@ class GenerativeAgent(BaseModel):
             )
             return True, f"{response_text}"
         else:
-            save_str = f"{self.name} 观测到 {observation}, {response}"
+            save_str = f"{observation}。{self.name} 回复了 {response}"
             # 存 context
             self.context.add_context(save_str)
             # 存记忆

@@ -151,7 +151,7 @@ class GenerativeAgent(BaseModel):
                 {self.memory.add_memory_key: save_str},
             )
             return False, f"{response_text}"
-        regex_str = f"(SAY|{self.name}|{self.name} ?可能会回复|{self.name} ?会回复|{self.name} ?回复道|{self.name.upper()}" \
+        regex_str = f"(SAY|{self.name}|{self.name} ?回复|{self.name} ?可能会回复|{self.name} ?会回复|{self.name} ?回复道|{self.name.upper()}" \
                     f"|{self.name.upper()} ?可能会回复|{self.name.upper()} ?会回复|{self.name.upper()} ?回复道)(:|：)"
         if re.search(regex_str, response):
             response_text = self._clean_response(re.split(regex_str, response)[-1])

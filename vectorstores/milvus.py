@@ -30,6 +30,7 @@ class Milvus(VectorStore):
         self,
         embedding_function: Embeddings,
         collection_name: str = "LangChainCollection",
+        partition_name: str = None,
         connection_args: Optional[dict[str, Any]] = None,
         consistency_level: str = "Session",
         index_params: Optional[dict] = None,
@@ -118,6 +119,7 @@ class Milvus(VectorStore):
 
         self.embedding_func = embedding_function
         self.collection_name = collection_name
+        self.partition_name = partition_name
         self.index_params = index_params
         self.search_params = search_params
         self.consistency_level = consistency_level
@@ -440,15 +442,48 @@ class Milvus(VectorStore):
             insert_list = [insert_dict[x][i:end] for x in self.fields]
             # Insert into the collection.
             try:
-                res: Collection
-                res = self.col.insert(insert_list, timeout=timeout, **kwargs)
-                pks.extend(res.primary_keys)
+                if self.partition_name is not None:
+                    res = self.col.insert(insert_list, partition_name=self.partition_name, timeout=timeout, **kwargs)
+                    pks.extend(res.primary_keys)
+                else:
+                    res = self.col.insert(insert_list, timeout=timeout, **kwargs)
+                    pks.extend(res.primary_keys)
             except MilvusException as e:
                 logger.error(
                     "Failed to insert batch starting at entity: %s/%s", i, total_count
                 )
                 raise e
         return pks
+
+    def delete_by_primary_keys(self, primary_keys: List[str], timeout: Optional[int] = None, **kwargs: Any) -> int:
+        """Delete Milvus data by primary keys.
+
+        Args:
+            primary_keys (List[str]): The primary keys which inserted into milvus as metadata
+            timeout (Optional[int]): Timeout for each batch insert. Defaults to None.
+
+        Raises:
+            MilvusException: Failure to delete
+
+        Returns:
+            int: The delete count
+        """
+        from pymilvus import Collection, MilvusException
+
+        delete_count = 0
+
+        assert isinstance(self.col, Collection)
+        try:
+            if self.partition_name is not None:
+                res = self.col.delete(f"pk in {primary_keys}", partition_name=self.partition_name, timeout=timeout, **kwargs)
+                delete_count += res.delete_count
+            else:
+                res = self.col.delete(f"pk in {primary_keys}", timeout=timeout, **kwargs)
+                delete_count += res.delete_count
+        except MilvusException as e:
+            logger.error(f"Failed to delete milvus data: {primary_keys}")
+            raise e
+        return delete_count
 
     def similarity_search(
         self,
@@ -604,6 +639,7 @@ class Milvus(VectorStore):
             param=param,
             limit=k,
             expr=expr,
+            partition_names=[self.partition_name],
             output_fields=output_fields,
             timeout=timeout,
             **kwargs,

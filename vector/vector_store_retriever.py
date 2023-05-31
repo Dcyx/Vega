@@ -150,3 +150,9 @@ class TimeWeightedVectorStoreRetriever(BaseRetriever, BaseModel):
             if "created_at" not in doc.metadata:
                 doc.metadata["created_at"] = current_time.timestamp()
         return await self.vectorstore.aadd_documents(dup_docs, **kwargs)
+
+    def delete_document_by_primary_keys(self, primary_keys: List[int], **kwargs: Any):
+        """
+        Delete document by primary keys.
+        """
+        return self.vectorstore.delete_by_primary_keys(primary_keys, **kwargs)

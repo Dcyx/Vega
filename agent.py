@@ -35,6 +35,7 @@ from generative_agent import GenerativeAgent
 from generative_agent_memory import GenerativeAgentMemory
 from generative_agent_context import GenerativeAgentContext
 
+from langchain.schema import Document
 from langchain.chat_models import ChatOpenAI
 from langchain.embeddings import OpenAIEmbeddings
 
@@ -51,18 +52,6 @@ Agent UI
 # TODO: 第二轮识别中异常退出
 
 CONTEXT_DIR = "data/context"
-
-
-def create_new_memory_retriever():
-    """Create a new vector store retriever unique to the vector."""
-
-    # Define your embedding model
-    embeddings_model = OpenAIEmbeddings()
-
-    # Initialize the vectorstore as empty
-    vectorstore = Milvus(embeddings_model, connection_args={"host": "127.0.0.1", "port": "19530"}, relevance_score_fn=relevance_score_fn)
-    retriever = TimeWeightedVectorStoreRetriever(vectorstore=vectorstore, other_score_keys=["importance"], k=15)
-    return retriever
 
 
 def relevance_score_fn(score: float) -> float:
@@ -249,13 +238,13 @@ class Agent(QWidget):
         #
         self.agent_memory = GenerativeAgentMemory(
             llm=language_model,
-            memory_retriever=create_new_memory_retriever(),
+            memory_retriever=self.create_new_memory_retriever(),
             verbose=True,
             reflection_threshold=8  # we will give this a relatively low number to show how reflection works
         )
 
         #
-        user_context_dir = os.path.join(CONTEXT_DIR, user_id, self.agent_name)
+        user_context_dir = os.path.join(CONTEXT_DIR, user_id, self.agent_id)
         self.user_context_file = os.path.join(user_context_dir, "context.txt")
         if not os.path.exists(user_context_dir):
             os.makedirs(user_context_dir, exist_ok=True)
@@ -281,6 +270,30 @@ class Agent(QWidget):
 
         #
         self.chat_window_norm = ChatWindowNormal(parent=self)
+
+    def create_new_memory_retriever(self):
+        """Create a new vector store retriever unique to the vector."""
+
+        # Define your embedding model
+        partition_name = f"{self.user_id}_{self.agent_id}"
+        embeddings_model = OpenAIEmbeddings()
+
+        # Initialize the vectorstore as empty
+        vectorstore = Milvus(embeddings_model, connection_args={"host": "127.0.0.1", "port": "19530"},
+                             relevance_score_fn=relevance_score_fn, partition_name=partition_name)
+        retriever = TimeWeightedVectorStoreRetriever(vectorstore=vectorstore, other_score_keys=["importance"], k=15)
+        if not vectorstore.col.has_partition(partition_name):
+            vectorstore.col.create_partition(partition_name)
+            document = Document(
+                page_content=" ", metadata={"importance": 0.0}
+            )
+            try:
+                result = retriever.add_documents([document])
+                delete_count = retriever.delete_document_by_primary_keys(result)
+                print(f">>> Delete redundant memory which used to avoid master-slave synchronization exceptions: {delete_count}")
+            except Exception as e:
+                raise e
+        return retriever
 
     def save_context_to_local(self):
         self.agent_context.save_context_to_local(self.user_context_file)

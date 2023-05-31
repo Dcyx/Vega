@@ -1,3 +1,4 @@
+import json
 import sys
 import time
 import openai
@@ -17,6 +18,8 @@ class ChatClient(QWidget):
         self.agent = parent.agent
         self.user_name = parent.user_name
         self.agent_name = parent.agent_name
+        self.user_memory_dir = parent.user_memory_dir
+        self.user_context_file = parent.user_context_file
         # 添加记忆存储
         self.user_memory_dir = parent.user_memory_dir
         self.setGeometry(parent.x() - 600, parent.y() + parent.height() - 337, 600, 337)
@@ -49,10 +52,10 @@ class ChatClient(QWidget):
 
         """
         messages = [
-            # {"role": "system", "content": "接下来你要以 vega 的身份跟我说话，你的名字叫 vega，灵感来源于天琴座中最明亮的星星 织女一，"
-            #                               "同时织女也是中国古代爱情故事牛郎与织女中的角色。你的性格是非常活泼，幽默的。你作为我的朋友，"
-            #                               "会尽量满足我的要求，同时，我们是非常亲近的朋友，你有什么话都可以直说。不要用敬语，语气口吻越随便越好。"
-            #                               "接下来你只需要以我的朋友 vega 这个身份与我交流。"},
+            {"role": "system", "content": "接下来你要以 vega 的身份跟我说话，你的名字叫 vega，灵感来源于天琴座中最明亮的星星 织女一，"
+                                          "同时织女也是中国古代爱情故事牛郎与织女中的角色。你的性格是非常活泼，幽默的。你作为我的朋友，"
+                                          "会尽量满足我的要求，同时，我们是非常亲近的朋友，你有什么话都可以直说。不要用敬语，语气口吻越随便越好。"
+                                          "接下来你只需要以我的朋友 vega 这个身份与我交流。"},
             {"role": "user", "content": prompt}
         ]
         try:
@@ -78,8 +81,19 @@ class ChatClient(QWidget):
             self.delay_to_do(self.do_destroy)
         else:
             # 获取模型的回复
-            continue_chat, text_output = self.agent.generate_dialogue_response(f"{self.user_name} 对 {self.agent_name} 说: {msg}")
+            continue_chat, text_output, emotion_output \
+                = self.agent.generate_dialogue_response(f"{self.user_name} 对 {self.agent_name} 说: {msg}")
             # TODO 添加回复结果的情感识别以及贴图匹配
+            print(f'> text_output = {text_output}, emotion_output = {emotion_output}')
+            # TODO 这里应该是设置一个值，让 parent 去获取，而不是直接调用 parent 的函数
+            # self.parent_role.set_timer(emotion_output)
+            self.agent.emotion_status = emotion_output
+            print(f'> emotion_status = {self.agent.emotion_status}')
+
+            # 保存记忆
+            self.agent.memory.memory_retriever.save_memories_to_local(self.user_memory_dir)
+            self.agent.context.save_context_to_local(self.user_context_file)
+
             self.content.append(f"{self.agent_name}: {text_output}")
             if not continue_chat:
                 self.delay_to_do(self.do_destroy)

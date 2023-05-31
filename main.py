@@ -6,6 +6,8 @@ import codecs
 import configparser
 import openai
 import random
+import json
+from typing import Dict, List
 
 from generative_agent import GenerativeAgent
 from generative_agent_memory import GenerativeAgentMemory
@@ -44,6 +46,18 @@ Vega: My first virtual companion
 icon = os.path.join('img/icon.png')
 FAISS_DIR = "data/index"
 CONTEXT_DIR = "data/context"
+character_config_filename = "agent_character_custom_config.json"
+RUN_EMOTION_TIMES = 5
+
+def load_character_config(filename):
+    '''
+    加载配置文件
+    '''
+    print(f'load_character_config from {filename}')
+    with open(filename, 'r') as f:
+        character_config = json.load(f)
+
+    return character_config
 
 
 def get_images(pics):
@@ -53,6 +67,30 @@ def get_images(pics):
         img.load('img/'+item)
         pic_list.append(img)
     return pic_list
+
+
+def load_character_images(pic_dir: str, agent_images: Dict[str, List[str]]):
+    '''
+    加载用户自定义的 agent 图片
+    e.g.
+        "character_pic": {
+            "生气": ["生气.png"],
+            ......
+        }
+    Args:
+        pic_dir: 图片路径
+        agent_images: 从 config 中加载的图片配置
+    '''
+    emotion2pic = {}
+    for emotion in agent_images:
+        images = agent_images[emotion]
+        emotion2pic[emotion] = []
+        for item in images:
+            img = QImage()
+            img.load(os.path.join(pic_dir, item))
+            print(f"load pic from {os.path.join(pic_dir, item)}")
+            emotion2pic[emotion].append(img)
+    return emotion2pic
 
 
 class Vega(QWidget):
@@ -82,16 +120,43 @@ class Vega(QWidget):
         self.setAutoFillBackground(True)  # 非自动填充
         self.repaint()
 
+        # 2023/5/18 agent相关改成用户自定义配置 @xiaohui
+        # 1. 从配置文件中加载 agent 的信息
+        agent_info = load_character_config(character_config_filename)
+        self.agent_name = agent_info["agent_name"]
+        self.age = agent_info["agent_age"]
+        traits = agent_info['agent_traits']
+        relation = agent_info['agent_relation']
+
+        # 2. 表情和贴图相关配置
+        # 2.1 从配置中拿到所有 emotion 拼起来用于传给 prompt
+        self.all_emotions = "、".join(agent_info['agent_emotion_to_action'].keys())
+        print(f"all_emotions = {self.all_emotions}")
+        # 2.2 加载 agent 的默认动作和与 emotion 相关的动作
+        self.agent_default_action = load_character_images(
+            agent_info['agent_image_dir'], agent_info['agent_default_action'])
+        self.agent_emotion_to_action = load_character_images(
+            agent_info['agent_image_dir'], agent_info['agent_emotion_to_action'])
+
         # Load actions & resize & init position
         self.img = QLabel(self)
         self.action_dataset = []
-        self.init_data()
-        self.set_pic("vega1.png")
-        self.resize(128, 128)
+        # self.init_data()
+
+        # 使用默认的表情和动作进行配置
+        self.emotion_action_dataset = self.init_config_images(self.agent_emotion_to_action)  # key是表情，value 是表情对应的图
+        self.default_action_dataset = self.init_config_images(self.agent_default_action)
+        self.action_dataset = list(self.default_action_dataset.values())
+
+        # 设置的默认图片也是从配置文件中读的
+        self.set_pic(os.path.join(agent_info['agent_image_dir'], agent_info['agent_init_image']))
+        # TODO 要把图片修成一样大
+        self.resize(300, 300)
         self.show()
         self.runing = False
+        self.running_emotion = RUN_EMOTION_TIMES
         self.timer = QTimer()
-        self.timer.timeout.connect(self.run_random_actions)
+        self.timer.timeout.connect(self.run_emotion_actions)
         self.timer.start(500)
         self.init_position(random_pos=False)
 
@@ -110,11 +175,6 @@ class Vega(QWidget):
         # TODO 用户id应该是生成的不应该是写死的，应该支持多用户
         self.user_name = self.config.get("User", "name")
         self.user_id = self.config.get("User", "id")
-
-        self.agent_name = self.config.get("Agent", "name")
-        self.age = self.config.get("Agent", "age")
-        traits = self.config.get("Agent", "traits")
-        relation = self.config.get("Agent", "relation")
 
         # Init generative vector
         language_model = ChatOpenAI(max_tokens=1500, model_name="gpt-3.5-turbo")  # Can be any LLM you want.
@@ -152,11 +212,23 @@ class Vega(QWidget):
             age=self.age,
             traits=traits,
             relation=relation,
+            emotions=self.all_emotions,
             llm=language_model,
             memory=vega_memory,
             context=vega_context,
             verbose=True
         )
+
+    def init_config_images(self, emotion_images):
+        '''
+        根据配置文件对表情图进行设置
+        '''
+        init_target = {}
+        for emotion in emotion_images:
+            init_target[emotion] = []
+            init_target[emotion] = emotion_images[emotion]
+        print(f"init_config_images: init_target = {len(init_target)}")
+        return init_target
 
     def init_data(self):
         # singing
@@ -184,9 +256,9 @@ class Vega(QWidget):
         imgs = get_images(["vega20.png", "vega21.png", "vega20.png", "vega21.png", "vega20.png"])
         self.action_dataset.append(imgs)
 
-    def set_pic(self, pic):
+    def set_pic(self, pic_path):
         img = QImage()
-        img.load('img/'+pic)
+        img.load(pic_path)
         self.img.setPixmap(QPixmap.fromImage(img))
 
     def run_random_actions(self):
@@ -200,6 +272,33 @@ class Vega(QWidget):
             self.runing = False
         self.img.setPixmap(QPixmap.fromImage(imgs[self.index]))
         self.index += 1
+
+    def run_emotion_actions(self):
+        '''
+        根据 emotion 展示表情
+        '''
+        # 如果当前生成的 emotion 没有对应的表情图
+        if self.agent.emotion_status is None or self.agent.emotion_status not in self.emotion_action_dataset:
+            self.run_random_actions()
+        else:  # 根据 emotion 来获取表情
+            print(f">> self.emotion_status = {self.agent.emotion_status}")
+            if self.running_emotion > 0:
+                self.running_emotion -= 1
+                if not self.runing:
+                    self.index = 0
+                    self.runing = True
+                # 获取指定情绪的表情
+                imgs = self.emotion_action_dataset[self.agent.emotion_status]
+                print(f"get imgs of emotion = {self.agent.emotion_status} ")
+                if self.index >= len(imgs):
+                    self.index = 0
+                    self.runing = False
+                self.img.setPixmap(QPixmap.fromImage(imgs[self.index]))
+                self.index += 1
+            else:
+                self.running_emotion = RUN_EMOTION_TIMES
+                self.agent.emotion_status = None
+                self.run_random_actions()
 
     def init_position(self, random_pos=False):
         screen = QDesktopWidget().screenGeometry()
@@ -299,4 +398,3 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     vega = Vega()
     sys.exit(app.exec_())
-

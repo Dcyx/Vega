@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -32,6 +33,10 @@ class GenerativeAgent(BaseModel):
     """Permanent traits to ascribe to the character."""
     relation: str
     """The relationship to the speaker."""
+    emotions: Optional[str] = None
+    emotion_status: str = None
+    """可选表情"""
+
     memory: GenerativeAgentMemory
     """The memory object that combines relevance, recency, and 'importance'."""
     context: GenerativeAgentContext
@@ -77,28 +82,41 @@ class GenerativeAgent(BaseModel):
         prompt = PromptTemplate.from_template(
             "我的信息: {agent_description} "
             + "\n当前时间是: {current_time}."
-            + "\n当前场景下对 {agent_name} 的要求包括: {agent_claim}"
+            # + "\n当前场景下对 {agent_name} 的要求包括: {agent_claim}"
             + "\n相关记忆包括: {relevant_memories}"  # chain.run.prep_inputs 中检索 relevant_memories
             + "\n最近的聊天记录包括：{last_context}"
-            + "\n\n回复格式: 如果回复内容中包含告别的语义, 例如 拜拜、再见、下次再聊等, 就回复 'GOODBYE:\"回复内容\"'; 如果要继续对话, 就回复 'SAY:\"回复内容\"'. "
-              "不要直接将背景信息作为回复,回答的简洁一点,不要啰嗦,注意对话上下文."
-            + "\n\n基于观测到的聊天信息 '{observation}', {agent_name} 会回复什么内容?"
+            # + "\n\n回复格式: 如果回复内容中包含告别的语义, 例如 拜拜、再见、下次再聊等, 就回复 'GOODBYE:\"回复内容\"'; 如果要继续对话, 就回复 'SAY:\"回复内容\"'. "
+              "\n不要直接将背景信息作为回复,回答的简洁一点,不要啰嗦,注意对话上下文."
+            + "\n\n基于观测到的聊天信息 '{observation}', {agent_name} 会回复什么内容? 会表现出什么表情？会有什么样的心理活动？心理活动以 {agent_name} 的视角输出。可选 Emotion 有 [" + self.emotions + "]"
+            + "\n请输出一个 json，包含三个部分，回复内容、表情和动作，json 的 key 分别为 \"Response\" \"Emotion\" 和 \"Reaction\""
         )
         agent_description = self.get_agent_description()
-        agent_claim, obs_summary = self.get_agent_claim(agent_description=agent_description, observation=observation)
+        # agent_claim, obs_summary = self.get_agent_claim(agent_description=agent_description, observation=observation)
         last_context = self.get_context()
         current_time_str = datetime.now().strftime("%B %d, %Y, %I:%M %p")
         kwargs: Dict[str, Any] = dict(
             agent_description=agent_description,
             current_time=current_time_str,
             agent_name=self.name,
-            agent_claim=agent_claim,
+            # agent_claim=agent_claim,
             last_context=last_context,
             observation=observation,
         )
-        response = self.chain(prompt=prompt).run(queries=[observation, obs_summary], **kwargs).strip()
-        print(f"----Yancy----\n{response}\n")
-        return response
+        # json 格式解析，如果解析失败则再试一次，最多试3次
+        # TODO 尝试次数改配置
+        try_resp = 0
+        parser_response = None
+        while try_resp < 3:
+            response = self.chain(prompt=prompt).run(queries=[observation, ], **kwargs).strip()
+            try: # 成功解析json 格式则跳出循环不再继续尝试
+                parser_response = json.loads(response)
+                break
+            except:
+                print(f'parser json failed, retry with try_resp = {try_resp}....')
+                try_resp += 1
+        print(f"parser_response = \n{parser_response}\n")
+
+        return parser_response
 
     def get_agent_claim(self, agent_description, observation: str) -> str:
         """
@@ -157,10 +175,20 @@ class GenerativeAgent(BaseModel):
     #     else:
     #         return False, result
 
-    def generate_dialogue_response(self, observation: str) -> Tuple[bool, str]:
+    def generate_dialogue_response(self, observation: str) -> Tuple[bool, str, str]:
         """React to a given observation."""
+        # 返回的是已经解析的 json 格式 or None
         response_raw = self._generate_reaction(observation)
-        response = response_raw.strip().split("\n")[0]
+        if response_raw is None:
+            return True, "（网络出错了，请重试吧）"
+
+        # response = response_raw.strip().split("\n")[0]
+        try:
+            response, emotion = response_raw['Response'], response_raw['Emotion']
+            print(f'> response = {response}, emotion = {emotion}')
+            return True, response, emotion
+        except:
+            response = ""
 
         if "GOODBYE:" in response:
             response_text = self._clean_response(response.split("GOODBYE:")[-1])
@@ -172,7 +200,7 @@ class GenerativeAgent(BaseModel):
                 {},
                 {self.memory.add_memory_key: save_str},
             )
-            return False, f"{response_text}"
+            return False, f"{response_text}", ""
         regex_str = f"(SAY|{self.name}|{self.name} ?可能会回复|{self.name} ?会回复|{self.name} ?回复道|{self.name.upper()}" \
                     f"|{self.name.upper()} ?可能会回复|{self.name.upper()} ?会回复|{self.name.upper()} ?回复道)(:|：)"
         if re.search(regex_str, response):
@@ -185,7 +213,7 @@ class GenerativeAgent(BaseModel):
                 {},
                 {self.memory.add_memory_key: save_str},
             )
-            return True, f"{response_text}"
+            return True, f"{response_text}", ""
         else:
             save_str = f"{self.name} 观测到 {observation}, {response}"
             # 存 context
@@ -195,9 +223,9 @@ class GenerativeAgent(BaseModel):
                 {},
                 {self.memory.add_memory_key: save_str},
             )
-            return True, response
+            return True, response, ""
 
     def get_agent_description(self) -> str:
         """Return a description of the agent."""
         age = self.age if self.age is not None else "N/A"
-        return f"名字: {self.name} (年龄: {age})\n特征: {self.traits}{self.relation}"
+        return f"名字: {self.name} (年龄: {age})\n特征: {self.traits}\n{self.relation}"

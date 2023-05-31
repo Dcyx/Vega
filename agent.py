@@ -385,7 +385,12 @@ class Agent(QWidget):
         `不可避免的阻塞逻辑中 可以通过 QApplication.processEvents() 主动调用处理事件
         `https://www.pythonguis.com/tutorials/multithreading-pyqt-applications-qthreadpool/
         """
-        print("进入长按事件")
+        print(f"进入长按事件-{self.agent_name}")
+
+        # 提示用户: 开始对话
+        print(f"打开 Bubble: 监听-{self.agent_name}")
+        show_bubble_message("thought", self.x(), self.y(), "<p>" + "让我听听是谁在说话 (¯。¯ԅ)" + "</p>")
+
         # 启动监听
         listen_worker = Worker(listen_microphone_thread)
         listen_worker.signals.result.connect(self.worker_listen_result_post_process)
@@ -393,19 +398,14 @@ class Agent(QWidget):
         self.worker_listen_finished = False
         self.thread_pool.start(listen_worker)
 
-        # 提示用户: 开始对话
-        print("打开 Bubble: 监听")
-        show_bubble_message("thought", self.x(), self.y(), "<p>" + "让我听听是谁在说话 (¯。¯ԅ)" + "</p>")
-
         # 等待监听结果
-        # time.sleep(0.5)
         while True:
             if self.worker_listen_finished:
                 break
             else:
                 QApplication.processEvents()
                 time.sleep(0.016)
-        print("拿到语音数据")
+        print(f"拿到语音数据-{self.agent_name}")
         audio = self.worker_listen_result
 
         # 启动识别
@@ -421,7 +421,7 @@ class Agent(QWidget):
             else:
                 QApplication.processEvents()
                 time.sleep(0.016)
-        print("拿到语音结果")
+        print(f"拿到语音结果-{self.agent_name}")
         recognized_text = self.worker_recognize_result
 
         # 提示用户: 语音识别结果
@@ -441,7 +441,7 @@ class Agent(QWidget):
             else:
                 QApplication.processEvents()
                 time.sleep(0.016)
-        print("拿到语言模型返回结果")
+        print(f"拿到语言模型返回结果-{self.agent_name}")
         response_text = self.worker_response_result
 
         show_bubble_message("chat_right", self.x(), self.y(), "<p>" + response_text + "</p>")
@@ -519,7 +519,7 @@ if __name__ == '__main__':
     os.environ["OPENAI_API_KEY"] = api_key
     os.environ["OPENAI_API_BASE"] = api_base
     vega = Agent("888", "Yancy", {
-      "id": "GN-001",
+      "id": "Vega",
       "name": "Vega",
       "age": 24,
       "traits": "名字灵感来源于天琴座中最亮的卫星-织女一。性格活泼、幽默，平时大大咧咧，神经很大条，但同时又有很强的同理心，偶尔也会很温柔。喜欢开玩笑、玩网络梗、偶尔也会调侃朋友。",

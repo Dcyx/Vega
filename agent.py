@@ -247,7 +247,7 @@ class Agent(QWidget):
         language_model = ChatOpenAI(max_tokens=1500, model_name="gpt-3.5-turbo")  # Can be any LLM you want.
 
         #
-        vega_memory = GenerativeAgentMemory(
+        self.agent_memory = GenerativeAgentMemory(
             llm=language_model,
             memory_retriever=create_new_memory_retriever(),
             verbose=True,
@@ -256,12 +256,12 @@ class Agent(QWidget):
 
         #
         user_context_dir = os.path.join(CONTEXT_DIR, user_id, self.agent_name)
-        user_context_file = os.path.join(user_context_dir, "context.txt")
+        self.user_context_file = os.path.join(user_context_dir, "context.txt")
         if not os.path.exists(user_context_dir):
             os.makedirs(user_context_dir, exist_ok=True)
-        vega_context = GenerativeAgentContext()
-        if os.path.exists(user_context_file):
-            vega_context.load_context_from_local(user_context_file)
+        self.agent_context = GenerativeAgentContext()
+        if os.path.exists(self.user_context_file):
+            self.agent_context.load_context_from_local(self.user_context_file)
 
         self.agent = GenerativeAgent(
             name=self.agent_name,
@@ -269,8 +269,8 @@ class Agent(QWidget):
             traits=self.agent_traits,
             relation=self.agent_relation,
             llm=language_model,
-            memory=vega_memory,
-            context=vega_context,
+            memory=self.agent_memory,
+            context=self.agent_context,
             verbose=True
         )
 
@@ -281,6 +281,9 @@ class Agent(QWidget):
 
         #
         self.chat_window_norm = ChatWindowNormal(parent=self)
+
+    def save_context_to_local(self):
+        self.agent_context.save_context_to_local(self.user_context_file)
 
     def worker_listen_result_post_process(self, result):
         self.worker_listen_result = result
@@ -308,7 +311,7 @@ class Agent(QWidget):
         pic_list = []
         for item in pics:
             img = QImage()
-            img.load('img/' + item)
+            img.load(f"img/{self.agent_name}/{item}")
             pic_list.append(img)
         return pic_list
     
@@ -340,7 +343,7 @@ class Agent(QWidget):
 
     def set_pic(self, pic):
         img = QImage()
-        img.load('img/'+pic)
+        img.load(f"img/{self.agent_name}/{pic}")
         self.img.setPixmap(QPixmap.fromImage(img))
 
     def run_random_actions(self):
@@ -503,6 +506,7 @@ if __name__ == '__main__':
     os.environ["OPENAI_API_KEY"] = api_key
     os.environ["OPENAI_API_BASE"] = api_base
     vega = Agent("888", "Yancy", {
+      "id": "GN-001",
       "name": "Vega",
       "age": 24,
       "traits": "名字灵感来源于天琴座中最亮的卫星-织女一。性格活泼、幽默，平时大大咧咧，神经很大条，但同时又有很强的同理心，偶尔也会很温柔。喜欢开玩笑、玩网络梗、偶尔也会调侃朋友。",

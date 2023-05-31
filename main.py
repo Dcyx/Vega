@@ -67,14 +67,13 @@ class Vega(QWidget):
         self.tray_icon.setContextMenu(self.tray_icon_menu)
         self.tray_icon.show()
 
-
     def quit(self):
         # 保存记忆
-        # self.agent.context.save_context_to_local(self.user_context_file)
+        for agent in self.agents:
+            agent.save_context_to_local()
         self.close()
         sys.exit()
 
-    #
     def showing(self):
         agent_config = self.sender().data()
         agent_id = agent_config["id"]

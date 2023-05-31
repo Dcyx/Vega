@@ -189,7 +189,7 @@ class ChatWindowNormal(QWidget):
         self.user_name = parent.user_name
         self.agent_name = parent.agent_name
         # 添加记忆存储
-        self.setWindowTitle("Vega")
+        self.setWindowTitle("聊天框")
         self.setWindowFlags(Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶
         palette = QtGui.QPalette()
         bg = QtGui.QPixmap("img/background.jpg")
@@ -219,19 +219,20 @@ class ChatWindowNormal(QWidget):
         self.content.append(f"{self.user_name}: {msg}")
 
         if msg.upper() == "Q" or "退下吧" in msg:
-            self.content.append(f"{self.agent_name}: 切~ 臭屁! 拜拜 👋")
+            self.content.append(f"{self.agent_name}: 拜拜 👋")
             self.delay_to_do(self.do_close)
         else:
             continue_chat, text_output = self.agent.generate_dialogue_response(f"{self.user_name} 对 {self.agent_name} 说: {msg}")
             self.content.append(f"{self.agent_name}: {text_output}")
             if not continue_chat:
+                self.content.append(f"{self.agent_name}: 拜拜 👋")
                 self.delay_to_do(self.do_close)
         self.message.clear()
 
     def delay_to_do(self, slot):
         self.timer = QTimer(self)
         self.timer.timeout.connect(slot)
-        self.timer.start(1000)
+        self.timer.start(2000)
 
     def do_close(self):
         self.timer.stop()

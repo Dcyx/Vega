@@ -2,6 +2,9 @@ import os
 import sys
 import json
 import openai
+import random
+from functools import partial
+from agent import Agent
 
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
@@ -25,12 +28,13 @@ class Vega(QWidget):
         # 初始化基本属性
         QWidget.__init__(self)
 
-        # Load config TODO: load user config from server
+        # Load Config
         config_private = 'config_private.json'
         self.config = {}
         with open(config_private, encoding='utf-8') as f:
             self.config = json.load(f)
-        # set openai env
+
+        # Set openai env
         api_key = self.config.get("openai_api_key")
         api_base = self.config.get("openai_api_base")
         openai.api_key = api_key
@@ -38,22 +42,31 @@ class Vega(QWidget):
         os.environ["OPENAI_API_KEY"] = api_key
         os.environ["OPENAI_API_BASE"] = api_base
 
-        self.agents = self.config.get("agents")
+        # Init user info
         self.user_id = self.config.get("user_id")
         self.user_name = self.config.get("user_name")
+        self.agent_config_list = self.config.get("agents")
+        self.agents = []
 
         # Tray Config
-        # showing = QAction("现身~", self, triggered=self.showing)
-        # showing.setIcon(QIcon(icon))
-        quit = QAction("退出", self, triggered=self.quit)
-        quit.setIcon(QIcon(icon))
+        action_quit = QAction("quit", self, triggered=self.quit)
+        action_quit.setIcon(QIcon(icon))
+
         self.tray_icon_menu = QMenu(self)
-        # self.tray_icon_menu.addAction(showing)
-        self.tray_icon_menu.addAction(quit)
+        menu_agents = self.tray_icon_menu.addMenu("agents")
+        menu_agents.setIcon(QIcon(icon))
+        for agent in self.agent_config_list:
+            _action_show_agent = QAction(agent["name"], self)
+            _action_show_agent.setData(agent)
+            _action_show_agent.triggered.connect(self.showing)
+            _action_show_agent.setIcon(QIcon(icon))
+            menu_agents.addAction(_action_show_agent)
+        self.tray_icon_menu.addAction(action_quit)
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setIcon(QIcon(icon))
         self.tray_icon.setContextMenu(self.tray_icon_menu)
         self.tray_icon.show()
+
 
     def quit(self):
         # 保存记忆
@@ -61,9 +74,22 @@ class Vega(QWidget):
         self.close()
         sys.exit()
 
-    # 通过窗口透明度 显示/隐藏
+    #
     def showing(self):
-        self.setWindowOpacity(1)
+        agent_config = self.sender().data()
+        agent_id = agent_config["id"]
+        cached = False
+        for agent in self.agents:
+            if agent.agent_id == agent_id:
+                agent.setWindowOpacity(1)
+                agent.show()
+                cached = True
+                break
+        if not cached:
+            agent = Agent(self.user_id, self.user_name, agent_config)
+            agent.setWindowOpacity(1)
+            agent.show()
+            self.agents.append(agent)
 
 
 if __name__ == '__main__':

@@ -207,6 +207,7 @@ class Agent(QWidget):
         # Agent character params
         self.user_name = user_name
         self.user_id = user_id
+        self.agent_id = agent_config["id"]
         self.agent_name = agent_config['name']
         self.agent_age = agent_config['age']
         self.agent_traits = agent_config['traits']
@@ -220,7 +221,6 @@ class Agent(QWidget):
         self.worker_response_result = None
         self.worker_response_finished = True
         self.thread_pool = QThreadPool()
-        print("Multithreading with maximum %d threads" % self.thread_pool.maxThreadCount())
 
         # UI Window Config
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)  # 无边框 + 窗口置顶
@@ -238,7 +238,6 @@ class Agent(QWidget):
         self.load_agent_imgs()
         self.set_pic("vega1.png")
         self.resize(128, 128)
-        self.show()
         self.random_action_timer = QTimer()
         self.random_action_timer.timeout.connect(self.run_random_actions)
         self.random_action_timer.start(500)
@@ -509,5 +508,6 @@ if __name__ == '__main__':
       "traits": "名字灵感来源于天琴座中最亮的卫星-织女一。性格活泼、幽默，平时大大咧咧，神经很大条，但同时又有很强的同理心，偶尔也会很温柔。喜欢开玩笑、玩网络梗、偶尔也会调侃朋友。",
       "relation": "Vega 与 Yancy 是朋友关系"
     })
+    vega.show()
     sys.exit(app.exec_())
     

@@ -81,25 +81,28 @@ def listen_microphone_thread():
 
 
 def recognize_audio_thread(audio):
+    response: str
     try:
         print("识别中")
         recognizer = sr.Recognizer()
-        recognized_text = recognizer.recognize_whisper(audio, model="medium", language="zh")
+        # medium, small, base, tiny
+        recognized_text = recognizer.recognize_whisper(audio, model="tiny", language="zh")  # TODO: fix bug 第二次语音识别时导致一场退出
         print("识别完成")
         recognized_text = recognized_text.strip()
         if len(recognized_text) > 0:
-            return recognized_text
+            response = recognized_text
         else:
-            return "未检测到语音"
+            response = "未检测到语音"
     except sr.UnknownValueError:
         print("Could not understand audio")
-        return "无法理解"
+        response = "无法理解"
     except sr.RequestError as e:
         print("Error:", str(e))
-        return "网络异常"
+        response = "网络异常"
     except Exception as e:
         print(str(e))
-        return "其他异常"
+        response = "其他异常"
+    return response
 
 
 def show_bubble_message(bubble_type, px, py, message):
@@ -230,7 +233,7 @@ class Agent(QWidget):
         self.random_action_timer = QTimer()
         self.random_action_timer.timeout.connect(self.run_random_actions)
         self.random_action_timer.start(500)
-        self.init_position(random_pos=False)
+        self.init_position(random_pos=False)  # 初始位置 屏幕右下角
 
         # Init generative vector
         language_model = ChatOpenAI(max_tokens=1500, model_name="gpt-3.5-turbo")  # Can be any LLM you want.

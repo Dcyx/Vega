@@ -26,7 +26,6 @@ class ThoughtWindowBubble(WindowBubble):
         # 默认宽度 640, 高度 480
         self.px = px
         self.py = py
-
         # Window Label
         self.bubble = QLabel(self)
         self.bubble.setScaledContents(True)
@@ -67,7 +66,7 @@ class ThoughtWindowBubble(WindowBubble):
 
     def on_value_changed(self):
         # 根据动画进程的百分比，设置label的透明度
-        opacity = 1.0 - self.animation.currentLoopTime() / self.animation.totalDuration()
+        # opacity = 1.0 - self.animation.currentLoopTime() / self.animation.totalDuration()
         self.bubble.resize(self.width(), self.height())
 
     def on_finished(self):
